@@ -47,7 +47,6 @@ Config readConfigFile() {
     fscanf(f, "%d", &config.duracionVerde1);
     fscanf(f, "%d", &config.duracionVerde2);
 
-
     fscanf(f, "%d", &config.porcentajeAmbulancias);
 
     fclose(f);
@@ -83,21 +82,29 @@ int main() {
 
     Config config = readConfigFile();
 
-    int modalidad;
-    while (1) {
-        printf("Modalidad\n");
-        printf("\t1. Modo carnage\n");
-        printf("\t2. Semaforos\n");
-        printf("\t3. Oficiales de transito\n");
+    printf("      SIMULADOR DE PUENTE ESTRECHO - INICIO       \n");
+    printf("Seleccione la modalidad de administracion:\n");
+    printf("1. Funcionamiento Carnage (FIFO)\n");
+    printf("2. Funcionamiento Semaforos\n");
+    printf("3. Funcionamiento Oficial de Transito\n");
+    printf("Ingrese el numero de su eleccion (1-3): ");
+    
+    int modoelec;
+    scanf("%d", &modoelec);
+    switch (modoelec) {
+        case 1:
 
-        scanf("%d", &modalidad);
+        case 2:
 
-        if (modalidad < 1 || modalidad > 3) {
-            printf("\nEres mongolo?\n");
-        } else {
-            break;
-        }
+
+        case 3:
+
+
+        default:
+            printf("\n[ERROR] Modalidad no reconocida (%d). Debe ser 1, 2 o 3.\n");
+            return 0;
     }
+    // inicializacion de hilos
 
     // // inicializacion de hilos
     // pthread_t t1;
