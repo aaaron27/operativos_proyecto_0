@@ -91,6 +91,7 @@ int main() {
     
     int modoelec;
     scanf("%d", &modoelec);
+
     switch (modoelec) {
         case 1:
 
