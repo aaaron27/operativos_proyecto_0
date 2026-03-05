@@ -1,0 +1,6 @@
+longitud puente
+media exponencial de seg entre llegada de nuevos carros
+velocidad promedio
+valor k1 - carros que deja pasar
+valor k2 - carros que deja pasar
+duracion luz verde
