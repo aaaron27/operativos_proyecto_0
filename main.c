@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <math.h>
 #include <pthread.h>
 
 typedef struct {
@@ -55,6 +57,12 @@ Config readConfigFile() {
     return config;
 }
 
+int tiempoLlegada(int media) {
+    double u = (double)rand() / RAND_MAX;
+    double res = -log(1.0 - u) * media;
+    return (int)res; 
+}
+
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void* foo(void* arg) {
@@ -67,19 +75,37 @@ void* foo(void* arg) {
 }
 
 int main() {
+    srand(time(NULL));
+
     Config config = readConfigFile();
 
-    // inicializacion de hilos
-    pthread_t t1;
+    int modalidad;
+    while (1) {
+        printf("Modalidad\n");
+        printf("\t1. Modo carnage\n");
+        printf("\t2. Semaforos\n");
+        printf("\t3. Oficiales de transito\n");
 
-    // creacion del hilo
-    pthread_create(&t1, NULL, foo, NULL);
+        scanf("%d", &modalidad);
 
-    // sincronizacion del hilo con el main
-    pthread_join(t1, NULL);
+        if (modalidad < 1 || modalidad > 3) {
+            printf("\nEres mongolo?\n");
+        } else {
+            break;
+        }
+    }
 
-    // destruir el mutex
-    pthread_mutex_destroy(&mutex);
+    // // inicializacion de hilos
+    // pthread_t t1;
+
+    // // creacion del hilo
+    // pthread_create(&t1, NULL, foo, NULL);
+
+    // // sincronizacion del hilo con el main
+    // pthread_join(t1, NULL);
+
+    // // destruir el mutex
+    // pthread_mutex_destroy(&mutex);
     
     return 0;
 }
