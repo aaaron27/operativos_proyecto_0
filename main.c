@@ -20,8 +20,7 @@ typedef struct {
     int k2;
     int duracionVerde1;
     int duracionVerde2;
-    int porcentajeAmbulancias1;
-    int porcentajeAmbulancias2;
+    int porcentajeAmbulancias;
 } Config;
 
 Config readConfigFile() {
@@ -49,8 +48,7 @@ Config readConfigFile() {
     fscanf(f, "%d", &config.duracionVerde2);
 
 
-    fscanf(f, "%d", &config.porcentajeAmbulancias1);
-    fscanf(f, "%d", &config.porcentajeAmbulancias2);
+    fscanf(f, "%d", &config.porcentajeAmbulancias);
 
     fclose(f);
 

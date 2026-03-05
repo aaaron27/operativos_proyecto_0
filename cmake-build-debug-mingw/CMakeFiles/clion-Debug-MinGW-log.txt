@@ -1,0 +1,1 @@
+CMakeLists.txt not found in C:\Users\faken\Desktop\code\c\proyecto0SO\operativos_proyecto_0 Select CMakeLists.txt
