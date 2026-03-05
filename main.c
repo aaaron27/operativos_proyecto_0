@@ -20,8 +20,7 @@ typedef struct {
     int k2;
     int duracionVerde1;
     int duracionVerde2;
-    int porcentajeAmbulancias1;
-    int porcentajeAmbulancias2;
+    int porcentajeAmbulancias;
 } Config;
 
 Config readConfigFile() {
@@ -49,8 +48,7 @@ Config readConfigFile() {
     fscanf(f, "%d", &config.duracionVerde2);
 
 
-    fscanf(f, "%d", &config.porcentajeAmbulancias1);
-    fscanf(f, "%d", &config.porcentajeAmbulancias2);
+    fscanf(f, "%d", &config.porcentajeAmbulancias);
 
     fclose(f);
 
@@ -61,6 +59,12 @@ int tiempoLlegada(int media) {
     double u = (double)rand() / RAND_MAX;
     double res = -log(1.0 - u) * media;
     return (int)res; 
+}
+
+int esAmbulancia(int porcentaje) {
+    double u = (double)rand() / RAND_MAX;
+    if (u <= (double)porcentaje/100) return 1;
+    return 0;
 }
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
