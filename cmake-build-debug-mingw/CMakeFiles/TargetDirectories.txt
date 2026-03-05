@@ -1,0 +1,3 @@
+C:/Users/faken/Desktop/code/c/proyecto0SO/operativos_proyecto_0/cmake-build-debug-mingw/CMakeFiles/operativos_proyecto_0.dir
+C:/Users/faken/Desktop/code/c/proyecto0SO/operativos_proyecto_0/cmake-build-debug-mingw/CMakeFiles/edit_cache.dir
+C:/Users/faken/Desktop/code/c/proyecto0SO/operativos_proyecto_0/cmake-build-debug-mingw/CMakeFiles/rebuild_cache.dir

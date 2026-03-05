@@ -12,4 +12,5 @@ valor k2 - carros que deja pasar
 1. duracion luz verde
 2. duracion luz verde 
 
+
 porcentaje ambulancias
