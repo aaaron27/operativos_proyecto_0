@@ -1,6 +1,16 @@
 longitud puente
-media exponencial de seg entre llegada de nuevos carros
-velocidad promedio
+
+1. media exponencial de seg entre llegada de nuevos carros
+2. media exponencial de seg entre llegada de nuevos carros
+
+1. velocidad promedio
+2. velocidad promedio
+
 valor k1 - carros que deja pasar
 valor k2 - carros que deja pasar
-duracion luz verde
+
+1. duracion luz verde
+2. duracion luz verde 
+
+1. porcentaje ambulancias
+2. porcentaje ambulancias
