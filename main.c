@@ -3,43 +3,39 @@
 #include <time.h>
 #include <math.h>
 #include <pthread.h>
+#include <unistd.h>
 #define M_PI 3.14159265358979323846
 
 int longitudPuente;
-
 int mediaLLegada1;
 int mediaLLegada2;
-
 int velocidadPromedio1;
 int velocidadPromedio2;
-
 int minVelocidad1;
 int minVelocidad2;
-
 int maxVelocidad1;
 int maxVelocidad2;
-
 int k1;
 int k2;
-
 int duracionVerde1;
 int duracionVerde2;
-
 int porcentajeAmbulancias;
 
+int semaforo = 0;
+
 typedef struct {
-    unsigned int speed;
+    int id;
+    int speed;
     int isAmbulance; // true-false
-    int type;
+    int horaLlegada;
 } Car;
 
 
 void readConfigFile() {
-    FILE *f = fopen("C:/Users/faken/Desktop/code/c/proyecto0SO/operativos_proyecto_0/config.txt", "r");
+    FILE *f = fopen("config.txt", "r");
 
     if (f == NULL) {
         printf("Error al abrir archivo config.txt\n");
-        // Salir del programa si no hay configuración, ya que sin ella nada funcionará
         exit(1);
     }
 
@@ -75,6 +71,35 @@ int tiempoLlegada(int media) {
     return (int)res;
 }
 
+int cantidadCarrosEnTiempoX(int tiempoX, int mediaLlegada) {
+    if (mediaLlegada <= 0) return 0;
+
+    double lambda = (double)tiempoX / mediaLlegada;
+    double limite = exp(-lambda);
+    double multiplicador = 1.0;
+    int cantidadCarros = 0;
+
+    do {
+        cantidadCarros++;
+        double u = (double)rand() / RAND_MAX;
+        multiplicador *= u;
+    } while (multiplicador > limite);
+
+    return cantidadCarros - 1;
+}
+
+
+void generarTiemposAbsolutos(int cantidadCarros, int mediaLlegada, int tiemposAbsolutos[]) {
+    if (cantidadCarros <= 0) return;
+
+    int tiempoAcumulado = 0;
+    for (int i = 0; i < cantidadCarros; i++) {
+        int tiempoEspera = tiempoLlegada(mediaLlegada);
+        tiempoAcumulado += tiempoEspera;
+        tiemposAbsolutos[i] = tiempoAcumulado;
+    }
+}
+
 int esAmbulancia(int porcentaje) {
     double u = (double)rand() / RAND_MAX;
     if (u <= (double)porcentaje/100) return 1;
@@ -95,20 +120,121 @@ int generarVelocidad(int media, int min, int max) {
 }
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
-void* foo(void* arg) {
+void* semaforoControlador(void* arg) {
+    // while true
+    while(1) {
+        pthread_mutex_lock(&mutex);
+        semaforo = 0;
+        printf("Semaforo Izquierdo en verde por %d segundos\n", duracionVerde1);
+        pthread_cond_broadcast(&cond);
+        pthread_mutex_unlock(&mutex);
+        sleep(duracionVerde1);
+
+        pthread_mutex_lock(&mutex);
+        semaforo = 1;
+        printf("Semaforo Derecho en verde por %d segundos\n", duracionVerde2);
+        pthread_cond_broadcast(&cond);
+        pthread_mutex_unlock(&mutex);
+        sleep(duracionVerde2);
+    }
+
+    return NULL;
+}
+
+void* ladoIzquierdo(void* arg) {
+    Car carro = *(Car*)arg;
+    unsigned long id = carro.id;
+
     // region critica
     pthread_mutex_lock(&mutex);
 
-    pthread_mutex_unlock(&mutex);
+    while (semaforo) {
+        printf("Carro %lu lado izq esperando a la hora %d\n", id, carro.horaLlegada);
+        pthread_cond_wait(&cond, &mutex);
+    }
+
+    printf("Carro %lu lado izq cruzando\n", id);
+    pthread_mutex_unlock(&mutex);   
+
+    sleep(longitudPuente / carro.speed);
+    printf("Carro %lu lado izq finalizo\n", id);
 
     return NULL;
+}
+
+void* ladoDerecho(void* arg) {
+    Car carro = *(Car*)arg;
+    unsigned long id = carro.id;
+
+    // region critica
+    pthread_mutex_lock(&mutex);
+
+    while (semaforo != 1) {
+        printf("Carro %lu lado der esperando a la hora %d\n", id, carro.horaLlegada);
+        pthread_cond_wait(&cond, &mutex);
+    }
+
+    printf("Carro %lu lado der cruzando\n", id);
+    pthread_mutex_unlock(&mutex);   
+
+    sleep(longitudPuente / carro.speed);
+    printf("Carro %lu lado der finalizo\n", id);
+
+    return NULL;
+}
+
+void semaforoModo(int seconds) {
+    int nIzq = cantidadCarrosEnTiempoX(seconds, mediaLLegada1);
+    int nDer = cantidadCarrosEnTiempoX(seconds, mediaLLegada2);
+
+    pthread_t controlador;
+    pthread_t carroIzq_t[nIzq];
+    pthread_t carroDer_t[nDer];
+
+    int llegadaIzq[nIzq];
+    int llegadaDer[nDer];
+
+    generarTiemposAbsolutos(nIzq, mediaLLegada1, llegadaIzq);
+    generarTiemposAbsolutos(nDer, mediaLLegada2, llegadaDer);
+
+    Car carroIzq[nIzq];
+    Car carroDer[nDer];
+
+    pthread_create(&controlador, NULL, semaforoControlador, NULL);
+
+    for (int i = 0; i < nIzq; i++) {
+        carroIzq[i].speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+        carroIzq[i].isAmbulance = esAmbulancia(porcentajeAmbulancias);
+        carroIzq[i].horaLlegada = llegadaIzq[i];
+        carroIzq[i].id = i;
+
+        pthread_create(&carroIzq_t[i], NULL, ladoIzquierdo, &carroIzq[i]);
+    }
+
+    for (int i = 0; i < nDer; i++) {
+        carroDer[i].speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+        carroDer[i].isAmbulance = esAmbulancia(porcentajeAmbulancias);
+        carroDer[i].horaLlegada = llegadaDer[i];
+        carroDer[i].id = i;
+
+        pthread_create(&carroDer_t[i], NULL, ladoDerecho, &carroDer[i]);
+    }
+
+    for (int i = 0; i < nIzq; i++) {
+        pthread_join(carroIzq_t[i], NULL);
+    }
+
+    for (int i = 0; i < nDer; i++) {
+        pthread_join(carroDer_t[i], NULL);
+    }
 }
 
 int main() {
     srand(time(NULL));
 
-    Config config = readConfigFile();
+    readConfigFile();
 
     printf("      SIMULADOR DE PUENTE ESTRECHO - INICIO       \n");
     printf("Seleccione la modalidad de administracion:\n");
@@ -122,7 +248,7 @@ int main() {
 
     switch (modoelec) {
         case 1:
-
+            semaforoModo(180);
             break;
         case 2:
 
@@ -134,6 +260,7 @@ int main() {
             printf("\n[ERROR] Modalidad no reconocida (%d). Debe ser 1, 2 o 3.\n");
             return 0;
     }
+
     // inicializacion de hilos
 
     // // inicializacion de hilos
@@ -145,13 +272,8 @@ int main() {
     // // sincronizacion del hilo con el main
     // pthread_join(t1, NULL);
 
-    // // destruir el mutex
-    // pthread_mutex_destroy(&mutex);
-    for(int i=0; i<1000; i++) {
-        int x = generarVelocidad(config.velocidadPromedio1, config.minVelocidad1, config.maxVelocidad1);
-        printf("%d",x);
-        printf("\n");
-    }
+    // destruir el mutex
+    pthread_mutex_destroy(&mutex);
 
     return 0;
 }
