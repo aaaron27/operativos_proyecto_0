@@ -45,6 +45,7 @@ typedef struct {
     int speed;
     int isAmbulance; // true-false
     int horaLlegada;
+    int type;
 } Car;
 
 
@@ -136,6 +137,11 @@ void generarTiemposAbsolutos(int cantidadCarros, int mediaLlegada, int tiemposAb
         tiemposAbsolutos[i] = tiempoAcumulado;
     }
 }
+
+// ======================================================================================
+//     SENMAFORO
+// ======================================================================================
+
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 // hace que la cpu no trabaja al maximo fijandose si esta disponible el recurso
@@ -271,30 +277,30 @@ void entrarPuente(Car* miCarro) {
     if (miCarro->type == 1) { // --- LADO 1 ---
         if (miCarro->isAmbulance) ambulanciasEsperando1++;
         while (carrosEnPuenteLado2 > 0 ||
-              (!miCarro->isAmbulance && (ambulanciasEsperando1 > 0 || ambulanciasEsperando2 > 0))) {
+            (!miCarro->isAmbulance && (ambulanciasEsperando1 > 0 || ambulanciasEsperando2 > 0))) {
             pthread_cond_wait(&condLado1, &mutexPuente);
         }
 
         if (miCarro->isAmbulance) ambulanciasEsperando1--;
         carrosEnPuenteLado1++;
 
-        printf("[Lado 1] ENTRA. (%s) | Vel: %d\n",
-               miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
+        //printf("[Lado 1] ENTRA. (%s) | Vel: %d\n",
+        //miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
 
     } else { // --- LADO 2 ---
         if (miCarro->isAmbulance) ambulanciasEsperando2++;
 
         while (carrosEnPuenteLado1 > 0 ||
-              (!miCarro->isAmbulance && (ambulanciasEsperando1 > 0 || ambulanciasEsperando2 > 0)) ||
-              (miCarro->isAmbulance && ambulanciasEsperando1 > 0)) {
+            (!miCarro->isAmbulance && (ambulanciasEsperando1 > 0 || ambulanciasEsperando2 > 0)) ||
+            (miCarro->isAmbulance && ambulanciasEsperando1 > 0)) {
             pthread_cond_wait(&condLado2, &mutexPuente);
         }
 
         if (miCarro->isAmbulance) ambulanciasEsperando2--;
         carrosEnPuenteLado2++;
 
-        printf("[Lado 2] ENTRA. (%s) | Vel: %d\n",
-               miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
+        //printf("[Lado 2] ENTRA. (%s) | Vel: %d\n",
+        // miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
     }
 
     pthread_mutex_unlock(&mutexPuente);
@@ -305,10 +311,10 @@ void salirPuente(Car* miCarro) {
 
     if (miCarro->type == 1) {
         carrosEnPuenteLado1--;
-        printf("[Lado 1] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
+        //printf("[Lado 1] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
     } else {
         carrosEnPuenteLado2--;
-        printf("[Lado 2] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
+        //printf("[Lado 2] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
     }
 
     if (carrosEnPuenteLado1 == 0 && carrosEnPuenteLado2 == 0) {
@@ -352,13 +358,13 @@ void* rutinaCarro(void* arg) {
 void* generadorLado1(void* arg) {
     int tiempoSimulacion = *(int*)arg;
     int totalCarros = cantidadCarrosEnTiempoX(tiempoSimulacion, mediaLLegada1);
-    printf("[Lado 1] Planificados %d vehiculos para los proximos %d segs.\n", totalCarros, tiempoSimulacion);
 
     if (totalCarros > 0) {
         int tiempos[totalCarros];
         generarTiemposAbsolutos(totalCarros, mediaLLegada1, tiempos);
 
         int tiempoActual = 0;
+        int contadorId = 1;
 
         for (int i = 0; i < totalCarros; i++) {
             int espera = tiempos[i] - tiempoActual;
@@ -370,6 +376,8 @@ void* generadorLado1(void* arg) {
 
             // --- NACE EL CARRO ---
             Car* nuevoCarro = (Car*)malloc(sizeof(Car));
+            nuevoCarro->id = contadorId++;
+            nuevoCarro->horaLlegada = tiempos[i];
             nuevoCarro->speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
             nuevoCarro->isAmbulance = esAmbulancia(porcentajeAmbulancias);
             nuevoCarro->type = 1;
@@ -379,21 +387,19 @@ void* generadorLado1(void* arg) {
             pthread_detach(hiloCarro);
         }
     }
-
-    printf("[Lado 1] El generador termino su turno.\n");
     return NULL;
 }
 
 void* generadorLado2(void* arg) {
     int tiempoSimulacion = *(int*)arg;
     int totalCarros = cantidadCarrosEnTiempoX(tiempoSimulacion, mediaLLegada2);
-    printf("[Lado 2] Planificados %d vehiculos para los proximos %d segs.\n", totalCarros, tiempoSimulacion);
 
     if (totalCarros > 0) {
         int tiempos[totalCarros];
         generarTiemposAbsolutos(totalCarros, mediaLLegada2, tiempos);
 
         int tiempoActual = 0;
+        int contadorId = 1;
 
         for (int i = 0; i < totalCarros; i++) {
             int espera = tiempos[i] - tiempoActual;
@@ -404,6 +410,8 @@ void* generadorLado2(void* arg) {
             }
 
             Car* nuevoCarro = (Car*)malloc(sizeof(Car));
+            nuevoCarro->id = contadorId++;
+            nuevoCarro->horaLlegada = tiempos[i];
             nuevoCarro->speed = generarVelocidad(velocidadPromedio2, minVelocidad2, maxVelocidad2);
             nuevoCarro->isAmbulance = esAmbulancia(porcentajeAmbulancias);
             nuevoCarro->type = 2;
@@ -413,10 +421,10 @@ void* generadorLado2(void* arg) {
             pthread_detach(hiloCarro);
         }
     }
-
-    printf("[Lado 2] El generador termino su turno.\n");
     return NULL;
 }
+
+
 void* hiloDibujante(void* arg) {
     while (simulacionActiva) {
         printf("\033[H\033[J");
