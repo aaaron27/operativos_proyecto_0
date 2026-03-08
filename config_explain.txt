@@ -6,10 +6,18 @@ longitud puente
 1. velocidad promedio
 2. velocidad promedio
 
+1.Limite velocidad Min
+2.Limite velocidad Min
+
+1.Limite velocidad Max
+2.Limite velocidad Max
+
 valor k1 - carros que deja pasar
 valor k2 - carros que deja pasar
 
 1. duracion luz verde
 2. duracion luz verde 
+
+
 
 porcentaje ambulancias
