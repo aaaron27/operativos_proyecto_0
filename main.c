@@ -50,7 +50,7 @@ typedef struct {
 
 
 void readConfigFile() {
-    FILE *f = fopen("C:/Users/faken/Desktop/code/c/proyecto0SO/operativos_proyecto_0/config.txt", "r");
+    FILE *f = fopen("config.txt", "r");
 
     if (f == NULL) {
         printf("Error al abrir archivo config.txt\n");
@@ -284,8 +284,8 @@ void entrarPuente(Car* miCarro) {
         if (miCarro->isAmbulance) ambulanciasEsperando1--;
         carrosEnPuenteLado1++;
 
-        //printf("[Lado 1] ENTRA. (%s) | Vel: %d\n",
-        //miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
+        printf("[Lado 1] ENTRA. (%s) | Vel: %d\n",
+        miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
 
     } else { // --- LADO 2 ---
         if (miCarro->isAmbulance) ambulanciasEsperando2++;
@@ -299,8 +299,8 @@ void entrarPuente(Car* miCarro) {
         if (miCarro->isAmbulance) ambulanciasEsperando2--;
         carrosEnPuenteLado2++;
 
-        //printf("[Lado 2] ENTRA. (%s) | Vel: %d\n",
-        // miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
+        printf("[Lado 2] ENTRA. (%s) | Vel: %d\n",
+        miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
     }
 
     pthread_mutex_unlock(&mutexPuente);
@@ -311,10 +311,10 @@ void salirPuente(Car* miCarro) {
 
     if (miCarro->type == 1) {
         carrosEnPuenteLado1--;
-        //printf("[Lado 1] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
+        printf("[Lado 1] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
     } else {
         carrosEnPuenteLado2--;
-        //printf("[Lado 2] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
+        printf("[Lado 2] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
     }
 
     if (carrosEnPuenteLado1 == 0 && carrosEnPuenteLado2 == 0) {
@@ -425,61 +425,61 @@ void* generadorLado2(void* arg) {
 }
 
 
-void* hiloDibujante(void* arg) {
-    while (simulacionActiva) {
-        printf("\033[H\033[J");
+// void* hiloDibujante(void* arg) {
+//     while (simulacionActiva) {
+//         printf("\033[H\033[J");
 
-        printf("=============================================================\n");
-        printf("                  SIMULADOR DE PUENTE ESTRECHO                \n");
-        printf("=============================================================\n\n");
+//         printf("=============================================================\n");
+//         printf("                  SIMULADOR DE PUENTE ESTRECHO                \n");
+//         printf("=============================================================\n\n");
 
-        printf("  [ LADO 1 (OESTE) ]                      [ LADO 2 (ESTE) ]\n");
-        printf("  Fila Normal: %d                         Fila Normal: %d\n",
-               (carrosEnPuenteLado1 > 0 ? 0 : 0), (carrosEnPuenteLado2 > 0 ? 0 : 0));
-        printf("    Ambulancias: %d                         Ambulancias: %d\n",
-               ambulanciasEsperando1, ambulanciasEsperando2);
-        printf("-------------------------------------------------------------\n\n");
+//         printf("  [ LADO 1 (OESTE) ]                      [ LADO 2 (ESTE) ]\n");
+//         printf("  Fila Normal: %d                         Fila Normal: %d\n",
+//                (carrosEnPuenteLado1 > 0 ? 0 : 0), (carrosEnPuenteLado2 > 0 ? 0 : 0));
+//         printf("    Ambulancias: %d                         Ambulancias: %d\n",
+//                ambulanciasEsperando1, ambulanciasEsperando2);
+//         printf("-------------------------------------------------------------\n\n");
 
-        printf("         \033[0;37m");
-        for (int i = 0; i < longitudPuente + 4; i++) printf("=");
-        printf("\033[0m\n");
+//         printf("         \033[0;37m");
+//         for (int i = 0; i < longitudPuente + 4; i++) printf("=");
+//         printf("\033[0m\n");
 
-        printf("       | \033[100m");
+//         printf("       | \033[100m");
 
-        pthread_mutex_lock(&mutexGrafico);
-        for (int i = 0; i < longitudPuente; i++) {
-            switch(puenteVisual[i]) {
-                case 0: printf("\033[100;37m ░ \033[0m\033[100m"); break;
-                case 1: printf("\033[44;1;37m > \033[0m\033[100m"); break;
-                case 2: printf("\033[42;1;37m < \033[0m\033[100m"); break;
-                case 3: printf("\033[41;1;33mA >\033[0m\033[100m"); break;
-                case 4: printf("\033[41;1;33m< A\033[0m\033[100m"); break;
-            }
-        }
-        pthread_mutex_unlock(&mutexGrafico);
+//         pthread_mutex_lock(&mutexGrafico);
+//         for (int i = 0; i < longitudPuente; i++) {
+//             switch(puenteVisual[i]) {
+//                 case 0: printf("\033[100;37m ░ \033[0m\033[100m"); break;
+//                 case 1: printf("\033[44;1;37m > \033[0m\033[100m"); break;
+//                 case 2: printf("\033[42;1;37m < \033[0m\033[100m"); break;
+//                 case 3: printf("\033[41;1;33mA >\033[0m\033[100m"); break;
+//                 case 4: printf("\033[41;1;33m< A\033[0m\033[100m"); break;
+//             }
+//         }
+//         pthread_mutex_unlock(&mutexGrafico);
 
-        printf("\033[0m |\n");
+//         printf("\033[0m |\n");
 
-        printf("         \033[0;37m");
-        for (int i = 0; i < longitudPuente + 4; i++) printf("=");
-        printf("\033[0m\n");
-        printf("           \033[0;36m≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈\033[0m\n\n");
+//         printf("         \033[0;37m");
+//         for (int i = 0; i < longitudPuente + 4; i++) printf("=");
+//         printf("\033[0m\n");
+//         printf("           \033[0;36m≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈\033[0m\n\n");
 
-        usleep(166666);
-    }
-    return NULL;
-}
-
-
+//         usleep(166666);
+//     }
+//     return NULL;
+// }
 
 int main() {
     srand(time(NULL));
 
     readConfigFile();
+
     puenteVisual = (int*)calloc(longitudPuente, sizeof(int));
-    printf("Cuanto va a durar la simulacion?");
+    printf("Cuanto va a durar la simulacion?\n");
     int tiempoSim;
     scanf("%d", &tiempoSim);
+
     printf("      SIMULADOR DE PUENTE ESTRECHO - INICIO       \n");
     printf("Seleccione la modalidad de administracion:\n");
     printf("1. Funcionamiento Carnage (FIFO)\n");
@@ -494,8 +494,8 @@ int main() {
         case 1:
             printf("Iniciando modalidad Carnage (FIFO)...\n\n");
             simulacionActiva = 1;
-            pthread_t dibujante;
-            pthread_create(&dibujante, NULL, hiloDibujante, NULL);
+            //pthread_t dibujante;
+            //pthread_create(&dibujante, NULL, hiloDibujante, NULL);
             pthread_t gen1, gen2;
             pthread_create(&gen1, NULL, generadorLado1, &tiempoSim);
             pthread_create(&gen2, NULL, generadorLado2, &tiempoSim);
@@ -507,7 +507,7 @@ int main() {
             printf("Simulacion finalizada.\n");
 
             simulacionActiva = 0;
-            pthread_join(dibujante, NULL);
+            //pthread_join(dibujante, NULL);
             break;
         case 2:
             semaforoModo(180);
@@ -519,19 +519,14 @@ int main() {
             printf("\n[ERROR] Modalidad no reconocida (%d). Debe ser 1, 2 o 3.\n");
             return 0;
     }
-    // inicializacion de hilos
 
-    // // inicializacion de hilos
-    // pthread_t t1;
-
-    // // creacion del hilo
-    // pthread_create(&t1, NULL, foo, NULL);
-
-    // // sincronizacion del hilo con el main
-    // pthread_join(t1, NULL);
 
     // destruir el mutex
     pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&mutexGrafico);
+    pthread_mutex_destroy(&mutexPuente);
+
+    pthread_cond_destroy(&cond);
 
     free(puenteVisual);
     return 0;
