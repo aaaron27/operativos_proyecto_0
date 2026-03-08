@@ -9,19 +9,28 @@
 //     GLOBALLLLLLLLLLLLLLLLLLLLLL
 // ========================================================================================
 int longitudPuente;
+
 int mediaLLegada1;
 int mediaLLegada2;
+
 int velocidadPromedio1;
 int velocidadPromedio2;
+
 int minVelocidad1;
 int minVelocidad2;
+
 int maxVelocidad1;
 int maxVelocidad2;
+
 int k1;
 int k2;
+
 int duracionVerde1;
 int duracionVerde2;
+
 int porcentajeAmbulancias;
+
+int semaforo = 0;
 
 int carrosEnPuenteLado1 = 0;
 int carrosEnPuenteLado2 = 0;
@@ -32,9 +41,10 @@ pthread_mutex_t mutexGrafico = PTHREAD_MUTEX_INITIALIZER;
 int simulacionActiva = 1;
 
 typedef struct {
-    unsigned int speed;
+    int id;
+    int speed;
     int isAmbulance; // true-false
-    int type;
+    int horaLlegada;
 } Car;
 
 
@@ -43,9 +53,11 @@ void readConfigFile() {
 
     if (f == NULL) {
         printf("Error al abrir archivo config.txt\n");
+        // Salir del programa si no hay configuración, ya que sin ella nada funcionará
         exit(1);
     }
 
+    // Leemos y guardamos directamente en las variables globales
     fscanf(f, "%d", &longitudPuente);
 
     fscanf(f, "%d", &mediaLLegada1);
@@ -126,14 +138,122 @@ void generarTiemposAbsolutos(int cantidadCarros, int mediaLlegada, int tiemposAb
 }
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+// hace que la cpu no trabaja al maximo fijandose si esta disponible el recurso
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
-void* foo(void* arg) {
+void* semaforoControlador(void* arg) {
+    // while true
+    while(1) {
+        pthread_mutex_lock(&mutex);
+        semaforo = 0;
+        printf("Semaforo Izquierdo en verde por %d segundos\n", duracionVerde1);
+        pthread_cond_broadcast(&cond); // avisa que ya termino a todos los hilos "dormidos"
+        pthread_mutex_unlock(&mutex);
+        sleep(duracionVerde1);
+
+        pthread_mutex_lock(&mutex);
+        semaforo = 1;
+        printf("Semaforo Derecho en verde por %d segundos\n", duracionVerde2);
+        pthread_cond_broadcast(&cond); // avisa que ya termino a todos los hilos "dormidos"
+        pthread_mutex_unlock(&mutex);
+        sleep(duracionVerde2);
+    }
+
+    return NULL;
+}
+
+void* ladoIzquierdo(void* arg) {
+    Car carro = *(Car*)arg;
+
     // region critica
     pthread_mutex_lock(&mutex);
 
+    if (carro.isAmbulance) {
+        printf("Ambulancia %d lado izq cruzando a la hora %d\n", carro.id, carro.horaLlegada);
+    } else {
+        while (semaforo) {
+            printf("Carro %d lado izq esperando a la hora %d\n", carro.id, carro.horaLlegada);
+            pthread_cond_wait(&cond, &mutex);
+        }
+
+        printf("Carro %d lado izq cruzando\n", carro.id);
+    }
+
     pthread_mutex_unlock(&mutex);
 
+    sleep(longitudPuente / carro.speed);
+    printf("Carro %d lado izq finalizo\n", carro.id);
+
     return NULL;
+}
+
+void* ladoDerecho(void* arg) {
+    Car carro = *(Car*)arg;
+
+    // region critica
+    pthread_mutex_lock(&mutex);
+    if (carro.isAmbulance) {
+        printf("Ambulancia %d lado der cruzando a la hora %d\n", carro.id, carro.horaLlegada);
+    } else {
+        while (semaforo != 1) {
+            printf("Carro %d lado der esperando a la hora %d\n", carro.id, carro.horaLlegada);
+            pthread_cond_wait(&cond, &mutex);
+        }
+
+        printf("Carro %d lado der cruzando\n", carro.id);
+    }
+
+    pthread_mutex_unlock(&mutex);
+
+    sleep(longitudPuente / carro.speed);
+    printf("Carro %d lado der finalizo\n", carro.id);
+
+    return NULL;
+}
+
+void semaforoModo(int seconds) {
+    int nIzq = cantidadCarrosEnTiempoX(seconds, mediaLLegada1);
+    int nDer = cantidadCarrosEnTiempoX(seconds, mediaLLegada2);
+
+    pthread_t controlador;
+    pthread_t carroIzq_t[nIzq];
+    pthread_t carroDer_t[nDer];
+
+    int llegadaIzq[nIzq];
+    int llegadaDer[nDer];
+    generarTiemposAbsolutos(nIzq, mediaLLegada1, llegadaIzq);
+    generarTiemposAbsolutos(nDer, mediaLLegada2, llegadaDer);
+
+    Car carroIzq[nIzq];
+    Car carroDer[nDer];
+
+    pthread_create(&controlador, NULL, semaforoControlador, NULL);
+
+    for (int i = 0; i < nIzq; i++) {
+        carroIzq[i].speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+        carroIzq[i].isAmbulance = esAmbulancia(porcentajeAmbulancias);
+        carroIzq[i].horaLlegada = llegadaIzq[i];
+        carroIzq[i].id = i;
+
+        pthread_create(&carroIzq_t[i], NULL, ladoIzquierdo, &carroIzq[i]);
+    }
+
+    for (int i = 0; i < nDer; i++) {
+        carroDer[i].speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+        carroDer[i].isAmbulance = esAmbulancia(porcentajeAmbulancias);
+        carroDer[i].horaLlegada = llegadaDer[i];
+        carroDer[i].id = i;
+
+        pthread_create(&carroDer_t[i], NULL, ladoDerecho, &carroDer[i]);
+    }
+
+    for (int i = 0; i < nIzq; i++) {
+        pthread_join(carroIzq_t[i], NULL);
+    }
+
+    for (int i = 0; i < nDer; i++) {
+        pthread_join(carroDer_t[i], NULL);
+    }
 }
 
 
@@ -362,7 +482,6 @@ int main() {
     int modoelec;
     scanf("%d", &modoelec);
 
-
     switch (modoelec) {
         case 1:
             printf("Iniciando modalidad Carnage (FIFO)...\n\n");
@@ -383,7 +502,7 @@ int main() {
             pthread_join(dibujante, NULL);
             break;
         case 2:
-
+            semaforoModo(180);
             break;
         case 3:
 
@@ -403,8 +522,8 @@ int main() {
     // // sincronizacion del hilo con el main
     // pthread_join(t1, NULL);
 
-    // // destruir el mutex
-    // pthread_mutex_destroy(&mutex);
+    // destruir el mutex
+    pthread_mutex_destroy(&mutex);
 
     free(puenteVisual);
     return 0;
