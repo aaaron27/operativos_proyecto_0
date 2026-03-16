@@ -4,7 +4,10 @@
 #include <math.h>
 #include <pthread.h>
 #include <unistd.h>
+
 #define M_PI 3.14159265358979323846
+#define max(a,b) ((a) > (b) ? (a) : (b))
+
 // ========================================================================================
 //     GLOBALLLLLLLLLLLLLLLLLLLLLL
 // ========================================================================================
@@ -59,6 +62,10 @@ int bridgeDirection = -1;
 pthread_mutex_t mutexCounter = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t condCounter = PTHREAD_COND_INITIALIZER;
 
+int ambulanciasIzq = 0;
+int ambulanciasDer = 0;
+pthread_cond_t condAmbulancia = PTHREAD_COND_INITIALIZER;
+
 void mutexsInit() {
     mutexs = malloc(longitudPuente * sizeof(pthread_mutex_t));
     conds = malloc(longitudPuente * sizeof(pthread_cond_t));
@@ -74,6 +81,7 @@ void destroyMutexsAndConds() {
 
     pthread_cond_destroy(&condCounter);
     pthread_cond_destroy(&condSemaforo);
+    pthread_cond_destroy(&condAmbulancia);
 
     for (int i = 0; i < longitudPuente; i++) {
         pthread_mutex_destroy(&mutexs[i]);
@@ -161,7 +169,6 @@ int cantidadCarrosEnTiempoX(int tiempoX, int mediaLlegada) {
     return cantidadCarros - 1;
 }
 
-
 void generarTiemposAbsolutos(int cantidadCarros, int mediaLlegada, int tiemposAbsolutos[]) {
     if (cantidadCarros <= 0) return;
 
@@ -179,7 +186,6 @@ void generarTiemposAbsolutos(int cantidadCarros, int mediaLlegada, int tiemposAb
 
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-// hace que la cpu no trabaja al maximo fijandose si esta disponible el recurso
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 void* semaforoControlador(void* arg) {
@@ -188,14 +194,14 @@ void* semaforoControlador(void* arg) {
         pthread_mutex_lock(&mutexSemaforo);
         semaforo = 0;
         printf("Semaforo Izquierdo en verde por %d segundos\n", duracionVerde1);
-        pthread_cond_broadcast(&condSemaforo); // avisa que ya termino a todos los hilos "dormidos"
+        pthread_cond_broadcast(&condSemaforo);
         pthread_mutex_unlock(&mutexSemaforo);
         sleep(duracionVerde1);
 
         pthread_mutex_lock(&mutexSemaforo);
         semaforo = 1;
         printf("Semaforo Derecho en verde por %d segundos\n", duracionVerde2);
-        pthread_cond_broadcast(&condSemaforo); // avisa que ya termino a todos los hilos "dormidos"
+        pthread_cond_broadcast(&condSemaforo);
         pthread_mutex_unlock(&mutexSemaforo);
         sleep(duracionVerde2);
     }
@@ -205,20 +211,29 @@ void* semaforoControlador(void* arg) {
 
 void* ladoIzquierdo(void* arg) {
     Car car = *(Car*)arg;
-
-    int secondsPerMutex = 1/car.speed;
+    double secondsPerMutex = 1.0/car.speed;
 
     pthread_mutex_lock(&mutexSemaforo);
+    printf("[Side I] %s %d ready\n", (car.isAmbulance) ? "Ambulance" : "Car", car.id);
 
-    printf("[Side I] Car %d ready\n", car.id);
+    if (car.isAmbulance) {
+        ambulanciasEsperando1++;
 
-    while (semaforo || (carInBridge > 0 && bridgeDirection != 0)) {
-        printf("[Side I] Car %d waiting at time %d\n", car.id, car.horaLlegada);
-        if (semaforo) {
-            pthread_cond_wait(&condSemaforo, &mutexSemaforo);
-        } else {
-            // semáforo verde pero hay carros, esperar que este vacio
-            pthread_cond_wait(&condCounter, &mutexSemaforo);
+        while (carInBridge > 0 && bridgeDirection != 0) {
+            printf("[Side I] Ambulance %d waiting for bridge to clear\n", car.id);
+            pthread_cond_wait(&condAmbulancia, &mutexSemaforo);
+        }
+
+        ambulanciasEsperando1--;
+    } else {
+        while (semaforo || (carInBridge > 0 && bridgeDirection != 0) || ambulanciasDer > 0) {
+            printf("[Side I] Car %d waiting at time %d\n", car.id, car.horaLlegada);
+            if (semaforo || ambulanciasDer > 0) {
+                pthread_cond_wait(&condSemaforo, &mutexSemaforo);
+            } else {
+                // semáforo verde pero hay carros, esperar que este vacio
+                pthread_cond_wait(&condCounter, &mutexSemaforo);
+            }
         }
     }
 
@@ -230,7 +245,7 @@ void* ladoIzquierdo(void* arg) {
         pthread_mutex_lock(&mutexs[i]);
 
         printf("[Side I] Car %d in block %d\n", car.id, i);
-        sleep(secondsPerMutex);
+        usleep(secondsPerMutex * 1000000);
 
         pthread_mutex_unlock(&mutexs[i]);
     }
@@ -241,31 +256,39 @@ void* ladoIzquierdo(void* arg) {
     if (!carInBridge) {
         bridgeDirection = -1;
         pthread_cond_broadcast(&condCounter);
+        pthread_cond_broadcast(&condAmbulancia);
     }
 
     pthread_mutex_unlock(&mutexSemaforo);
-
     printf("[Side I] Car %d terminate\n", car.id);
-
     return NULL;
 }
 
 void* ladoDerecho(void* arg) {
     Car car = *(Car*)arg;
-
     int secondsPerMutex = 1/car.speed;
 
     pthread_mutex_lock(&mutexSemaforo);
+    printf("[Side D] %s %d ready\n", car.isAmbulance ? "Ambulance" : "Car", car.id);
 
-    printf("[Side D] Car %d ready\n", car.id);
+    if (car.isAmbulance) {
+        ambulanciasEsperando2++;
 
-    while (semaforo != 1 || (carInBridge > 0 && bridgeDirection != 1)) {
-        printf("[Side D] Car %d waiting at time %d\n", car.id, car.horaLlegada);
-        if (semaforo != 1) {
-            pthread_cond_wait(&condSemaforo, &mutexSemaforo);
-        } else {
-            // semáforo verde pero hay carros, esperar que este vacio
-            pthread_cond_wait(&condCounter, &mutexSemaforo);
+        while (carInBridge > 0 && bridgeDirection != 1) {
+            printf("[Side D] Ambulance %d waiting for bridge to clear\n", car.id);
+            pthread_cond_wait(&condAmbulancia, &mutexSemaforo);
+        }
+
+        ambulanciasEsperando2--;
+    } else {
+        while (semaforo != 1 || (carInBridge > 0 && bridgeDirection != 1) || ambulanciasEsperando1 > 0) {
+            printf("[Side D] Car %d waiting at time %d\n", car.id, car.horaLlegada);
+            if (semaforo != 1 || ambulanciasEsperando1 > 0) {
+                pthread_cond_wait(&condSemaforo, &mutexSemaforo);
+            } else {
+                // semáforo verde pero hay carros, esperar que este vacio
+                pthread_cond_wait(&condCounter, &mutexSemaforo);
+            }
         }
     }
 
@@ -275,10 +298,8 @@ void* ladoDerecho(void* arg) {
 
     for (int i = longitudPuente - 1; i >= 0; i--) {
         pthread_mutex_lock(&mutexs[i]);
-
         printf("[Side D] Car %d in block %d\n", car.id, i);
-        sleep(secondsPerMutex);
-
+        usleep(secondsPerMutex * 1000000);
         pthread_mutex_unlock(&mutexs[i]);
     }
 
@@ -288,55 +309,58 @@ void* ladoDerecho(void* arg) {
     if (!carInBridge) {
         bridgeDirection = -1;
         pthread_cond_broadcast(&condCounter);
+        pthread_cond_broadcast(&condAmbulancia);
     }
+
     pthread_mutex_unlock(&mutexSemaforo);
-
     printf("[Side D] Car %d terminate\n", car.id);
-
     return NULL;
 }
 
 void semaforoModo(int seconds) {
-    int nIzq = cantidadCarrosEnTiempoX(seconds, mediaLLegada1);
-    int nDer = cantidadCarrosEnTiempoX(seconds, mediaLLegada2);
-
     pthread_t controlador;
-    pthread_t carroIzq_t[nIzq];
-    pthread_t carroDer_t[nDer];
-
-    int llegadaIzq[nIzq];
-    int llegadaDer[nDer];
-    generarTiemposAbsolutos(nIzq, mediaLLegada1, llegadaIzq);
-    generarTiemposAbsolutos(nDer, mediaLLegada2, llegadaDer);
-
-    Car carroIzq[nIzq];
-    Car carroDer[nDer];
+    pthread_t carroIzq_t[seconds];
+    pthread_t carroDer_t[seconds];
 
     pthread_create(&controlador, NULL, semaforoControlador, NULL);
 
-    for (int i = 0; i < nIzq; i++) {
-        carroIzq[i].speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
-        carroIzq[i].isAmbulance = esAmbulancia(porcentajeAmbulancias);
-        carroIzq[i].horaLlegada = llegadaIzq[i];
-        carroIzq[i].id = i;
+    int izqIndex = 0;
+    int derIndex = 0;
 
-        pthread_create(&carroIzq_t[i], NULL, ladoIzquierdo, &carroIzq[i]);
+    int secondNextDerCar = tiempoLlegada(10);
+    int secondNextIzqCar = tiempoLlegada(10);
+    Car car;
+
+    for (int t = 1; t <= seconds; t++) {
+        if (t == secondNextDerCar) {
+            car.id = derIndex;
+            car.speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+            car.horaLlegada = t;
+            car.isAmbulance = esAmbulancia(porcentajeAmbulancias);
+
+            pthread_create(&carroIzq_t[derIndex], NULL, ladoDerecho, &car);
+            derIndex++;
+            secondNextDerCar += max(1, tiempoLlegada(10));
+        }
+        if (t == secondNextIzqCar) {
+            car.id = izqIndex;
+            car.speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+            car.horaLlegada = t;
+            car.isAmbulance = esAmbulancia(porcentajeAmbulancias);
+
+            pthread_create(&carroIzq_t[izqIndex], NULL, ladoIzquierdo, &car);
+            izqIndex++;
+            secondNextIzqCar += max(1, tiempoLlegada(10));
+        }
+
+        sleep(1);
     }
 
-    for (int i = 0; i < nDer; i++) {
-        carroDer[i].speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
-        carroDer[i].isAmbulance = esAmbulancia(porcentajeAmbulancias);
-        carroDer[i].horaLlegada = llegadaDer[i];
-        carroDer[i].id = i;
-
-        pthread_create(&carroDer_t[i], NULL, ladoDerecho, &carroDer[i]);
-    }
-
-    for (int i = 0; i < nIzq; i++) {
+    for (int i = 0; i < izqIndex; i++) {
         pthread_join(carroIzq_t[i], NULL);
     }
 
-    for (int i = 0; i < nDer; i++) {
+    for (int i = 0; i < derIndex; i++) {
         pthread_join(carroDer_t[i], NULL);
     }
 }
@@ -522,7 +546,6 @@ void* generadorLado2(void* arg) {
     return NULL;
 }
 
-
 void* hiloDibujante(void* arg) {
     while (simulacionActiva) {
         printf("\033[H\033[J");
@@ -568,14 +591,16 @@ void* hiloDibujante(void* arg) {
     return NULL;
 }
 
-
-
 int main() {
     srand(time(NULL));
 
     readConfigFile();
+
+    // init cond vars and mutexs
+    mutexsInit();
+
     puenteVisual = (int*)calloc(longitudPuente, sizeof(int));
-    printf("Cuanto va a durar la simulacion?");
+    printf("Cuanto va a durar la simulacion? ");
     int tiempoSim;
     scanf("%d", &tiempoSim);
     printf("      SIMULADOR DE PUENTE ESTRECHO - INICIO       \n");
@@ -608,7 +633,7 @@ int main() {
             pthread_join(dibujante, NULL);
             break;
         case 2:
-            semaforoModo(180);
+            semaforoModo(tiempoSim);
             break;
         case 3:
 
@@ -617,17 +642,7 @@ int main() {
             printf("\n[ERROR] Modalidad no reconocida (%d). Debe ser 1, 2 o 3.\n");
             return 0;
     }
-    // inicializacion de hilos
-
-    // // inicializacion de hilos
-    // pthread_t t1;
-
-    // // creacion del hilo
-    // pthread_create(&t1, NULL, foo, NULL);
-
-    // // sincronizacion del hilo con el main
-    // pthread_join(t1, NULL);
-
+    
     // destruir el mutex
     pthread_mutex_destroy(&mutex);
     pthread_mutex_destroy(&mutexGrafico);
