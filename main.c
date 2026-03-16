@@ -85,7 +85,7 @@ void destroyMutexsAndConds() {
 }
 
 void readConfigFile() {
-    FILE *f = fopen("C:/Users/faken/Desktop/code/c/proyecto0SO/operativos_proyecto_0/config.txt", "r");
+    FILE *f = fopen("config.txt", "r");
 
     if (f == NULL) {
         printf("Error al abrir archivo config.txt\n");
@@ -177,7 +177,13 @@ void generarTiemposAbsolutos(int cantidadCarros, int mediaLlegada, int tiemposAb
 //     SENMAFORO
 // ======================================================================================
 
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+// hace que la cpu no trabaja al maximo fijandose si esta disponible el recurso
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
 void* semaforoControlador(void* arg) {
+    // while true
     while(1) {
         pthread_mutex_lock(&mutexSemaforo);
         semaforo = 0;
@@ -405,6 +411,7 @@ void* rutinaCarro(void* arg) {
 
     int tiempoCruce = longitudPuente / miCarro->speed;
     if (tiempoCruce <= 0) tiempoCruce = 1;
+
     int microSegundosPorPaso = (tiempoCruce * 1000000) / longitudPuente;
     int posActual = (miCarro->type == 1) ? 0 : (longitudPuente - 1);
     int direccion = (miCarro->type == 1) ? 1 : -1;
@@ -449,6 +456,7 @@ void* rutinaCarro(void* arg) {
 void* generadorLado1(void* arg) {
     int tiempoSimulacion = *(int*)arg;
     int totalCarros = cantidadCarrosEnTiempoX(tiempoSimulacion, mediaLLegada1);
+
     if (totalCarros > 0) {
         int tiempos[totalCarros];
         generarTiemposAbsolutos(totalCarros, mediaLLegada1, tiempos);
@@ -567,7 +575,6 @@ int main() {
 
     readConfigFile();
     puenteVisual = (int*)calloc(longitudPuente, sizeof(int));
-    mutexsInit();
     printf("Cuanto va a durar la simulacion?");
     int tiempoSim;
     scanf("%d", &tiempoSim);
@@ -583,7 +590,7 @@ int main() {
 
     switch (modoelec) {
         case 1:
-            printf("Iniciando modalidad Carnage (FIFO)...\n\n\n");
+            printf("Iniciando modalidad Carnage (FIFO)...\n\n");
             simulacionActiva = 1;
             pthread_t dibujante;
             pthread_create(&dibujante, NULL, hiloDibujante, NULL);
@@ -623,6 +630,10 @@ int main() {
 
     // destruir el mutex
     pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&mutexGrafico);
+    pthread_mutex_destroy(&mutexPuente);
+
+    pthread_cond_destroy(&cond);
 
     free(puenteVisual);
     destroyMutexsAndConds();
