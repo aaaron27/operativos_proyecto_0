@@ -61,8 +61,6 @@ int carInBridge = 0;
 int bridgeDirection = -1;
 pthread_cond_t condCounter = PTHREAD_COND_INITIALIZER;
 
-int ambulanciasIzq = 0;
-int ambulanciasDer = 0;
 pthread_cond_t condAmbulancia = PTHREAD_COND_INITIALIZER;
 
 void mutexsInit() {
@@ -220,9 +218,9 @@ void* ladoIzquierdo(void* arg) {
 
         ambulanciasEsperando1--;
     } else {
-        while (semaforo || (carInBridge > 0 && bridgeDirection != 0) || ambulanciasDer > 0) {
+        while (semaforo || (carInBridge > 0 && bridgeDirection != 0) || ambulanciasEsperando2 > 0) {
             printf("[Side I] Car %d waiting at time %d\n", car.id, car.horaLlegada);
-            if (semaforo || ambulanciasDer > 0) {
+            if (semaforo || ambulanciasEsperando2 > 0) {
                 pthread_cond_wait(&condSemaforo, &mutexSemaforo);
             } else {
                 // semáforo verde pero hay carros, esperar que este vacio
@@ -599,8 +597,6 @@ void* hiloDibujante(void* arg) {
 // int bridgeDirection = -1;
 // pthread_cond_t condCounter = PTHREAD_COND_INITIALIZER;
 
-// int ambulanciasIzq = 0;
-// int ambulanciasDer = 0;
 // pthread_cond_t condAmbulancia = PTHREAD_COND_INITIALIZER;
 
 void* ladoIzquierdoTransito(void *arg) {
