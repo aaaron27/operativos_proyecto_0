@@ -223,7 +223,6 @@ void* trafficLightLeftSideRoutine(void* arg) {
             if (trafficLight || ambulancesRight > 0) {
                 pthread_cond_wait(&trafficLightCond, &trafficLightMutex);
             } else {
-                // semáforo verde pero hay carros, esperar que este vacio
                 pthread_cond_wait(&condCounter, &trafficLightMutex);
             }
         }
