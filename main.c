@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 #define M_PI 3.14159265358979323846
-#define max(a,b) ((a) > (b) ? (a) : (b))
 
 // ========================================================================================
 //     GLOBALLLLLLLLLLLLLLLLLLLLLL
@@ -48,6 +47,7 @@ int ambulanciasEsperando2 = 0;
 int* puenteVisual;
 pthread_mutex_t mutexGrafico = PTHREAD_MUTEX_INITIALIZER;
 int simulacionActiva = 1;
+
 typedef struct {
     int id;
     int speed;
@@ -65,9 +65,6 @@ pthread_cond_t *conds;
 int carInBridge = 0;
 int bridgeDirection = -1;
 pthread_cond_t condCounter = PTHREAD_COND_INITIALIZER;
-
-int ambulancesLeft = 0;
-int ambulancesRight = 0;
 
 pthread_mutex_t bridgeMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t leftSideCond = PTHREAD_COND_INITIALIZER;
@@ -89,6 +86,7 @@ int officerTurn = 0;
 int carsPassedThisTurn = 0;
 int waitingLeftNormal = 0;
 int waitingRightNormal = 0;
+
 void mutexsInit() {
     mutexs = malloc(bridgeWeight * sizeof(pthread_mutex_t));
     conds = malloc(bridgeWeight * sizeof(pthread_cond_t));
@@ -213,6 +211,7 @@ void generateAbsoluteTimes(int cantidadCarros, int mediaLlegada, int tiemposAbso
 // ======================================================================================
 //     Traffic light
 // ======================================================================================
+
 int trafficLigthControllerFlag = 1;
 int trafficLight = 0;
 
@@ -227,7 +226,7 @@ void* trafficLightRoutine(void* arg) {
 
         pthread_mutex_lock(&trafficLightMutex);
         trafficLight = 1;
-        printf("[Side R] Green Light for %d seconds\n", greenDurationRight);
+        printf("[Side D] Green Light for %d seconds\n", greenDurationRight);
         pthread_cond_broadcast(&trafficLightCond);
         pthread_mutex_unlock(&trafficLightMutex);
         sleep(greenDurationRight);
@@ -238,6 +237,8 @@ void* trafficLightRoutine(void* arg) {
 
 void* trafficLightLeftSideRoutine(void* arg) {
     Car car = *(Car*)arg;
+    free(arg);
+
     double secondsPerMutex = 1.0/car.speed;
 
     pthread_mutex_lock(&trafficLightMutex);
@@ -253,9 +254,9 @@ void* trafficLightLeftSideRoutine(void* arg) {
 
         ambulancesWaitingLeft--;
     } else {
-        while (trafficLight || (carInBridge > 0 && bridgeDirection != 0) || ambulancesRight > 0) {
+        while (trafficLight || (carInBridge > 0 && bridgeDirection != 0) || ambulancesWaitingRight > 0) {
             printf("[Side I] Car %d waiting at time %d\n", car.id, car.arrivalTime);
-            if (trafficLight || ambulancesRight > 0) {
+            if (trafficLight || ambulancesWaitingRight > 0) {
                 pthread_cond_wait(&trafficLightCond, &trafficLightMutex);
             } else {
                 pthread_cond_wait(&condCounter, &trafficLightMutex);
@@ -292,11 +293,12 @@ void* trafficLightLeftSideRoutine(void* arg) {
 
 void* trafficLightRightSideRoutine(void* arg) {
     Car car = *(Car*)arg;
+    free(arg);
+
     double secondsPerMutex = 1.0/car.speed;
 
     pthread_mutex_lock(&trafficLightMutex);
     printf("[Side D] %s %d ready\n", car.isAmbulance ? "Ambulance" : "Car", car.id);
-
     if (car.isAmbulance) {
         ambulancesWaitingRight++;
 
@@ -312,7 +314,6 @@ void* trafficLightRightSideRoutine(void* arg) {
             if (trafficLight != 1 || ambulancesWaitingLeft > 0) {
                 pthread_cond_wait(&trafficLightCond, &trafficLightMutex);
             } else {
-                // semáforo verde pero hay carros, esperar que este vacio
                 pthread_cond_wait(&condCounter, &trafficLightMutex);
             }
         }
@@ -353,40 +354,51 @@ void trafficLightMode(int seconds) {
     int izqIndex = 0;
     int derIndex = 0;
 
-    int secondNextDerCar = arrivalTime(averageArrivalTimeRight);
-    int secondNextIzqCar = arrivalTime(averageArrivalTimeLeft);
-    Car car;
+    int t1 = arrivalTime(averageArrivalTimeRight);
+    int t2 = arrivalTime(averageArrivalTimeLeft);
+
+    int secondNextDerCar = (t1 > 1) ? t2 : 1;
+    int secondNextIzqCar = (t2 > 1) ? t2 : 1;
+
+    printf("1: %d, 2: %d\n", secondNextDerCar, secondNextIzqCar);
 
     for (int t = 1; t <= seconds; t++) {
         if (t == secondNextDerCar) {
-            car.id = derIndex;
-            car.speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
-            car.arrivalTime = t;
-            car.isAmbulance = isAmbulance(ambulancesPercentage);
+            Car* car = malloc(sizeof(Car));
+            car->id = derIndex;
+            car->speed = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
+            car->arrivalTime = t;
+            car->isAmbulance = isAmbulance(ambulancesPercentage);
 
-            pthread_create(&carroIzq_t[derIndex], NULL, trafficLightRightSideRoutine, &car);
+            pthread_create(&carroDer_t[derIndex], NULL, trafficLightRightSideRoutine, car);
+
             derIndex++;
-            secondNextDerCar += max(1, arrivalTime(averageArrivalTimeRight));
+            int t = arrivalTime(averageArrivalTimeRight);
+            secondNextDerCar += (t > 1) ? t : 1;
         }
         if (t == secondNextIzqCar) {
-            car.id = izqIndex;
-            car.speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
-            car.arrivalTime = t;
-            car.isAmbulance = isAmbulance(ambulancesPercentage);
+            Car* car = malloc(sizeof(Car));
+            car->id = izqIndex;
+            car->speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
+            car->arrivalTime = t;
+            car->isAmbulance = isAmbulance(ambulancesPercentage);
 
-            pthread_create(&carroIzq_t[izqIndex], NULL, trafficLightLeftSideRoutine, &car);
+            pthread_create(&carroIzq_t[izqIndex], NULL, trafficLightLeftSideRoutine, car);
+
             izqIndex++;
-            secondNextIzqCar += max(1, arrivalTime(averageArrivalTimeLeft));
+            int t = arrivalTime(averageArrivalTimeLeft);
+            secondNextIzqCar += (t > 1) ? t : 1;
         }
 
+        printf("Seconds: %d\n", t);
         sleep(1);
     }
 
-    for (int i = 0; i < izqIndex-1; i++) {
+    for (int i = 0; i < izqIndex; i++) {
         pthread_join(carroIzq_t[i], NULL);
     }
 
-    for (int i = 0; i < derIndex-1; i++) {
+    for (int i = 0; i < derIndex; i++) {
         pthread_join(carroDer_t[i], NULL);
     }
 
