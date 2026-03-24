@@ -318,8 +318,8 @@ void trafficLightMode(int seconds) {
     int izqIndex = 0;
     int derIndex = 0;
 
-    int secondNextDerCar = arrivalTime(10);
-    int secondNextIzqCar = arrivalTime(10);
+    int secondNextDerCar = arrivalTime(averageArrivalTimeRight);
+    int secondNextIzqCar = arrivalTime(averageArrivalTimeLeft);
     Car car;
 
     for (int t = 1; t <= seconds; t++) {
@@ -331,7 +331,7 @@ void trafficLightMode(int seconds) {
 
             pthread_create(&carroIzq_t[derIndex], NULL, trafficLightRightSideRoutine, &car);
             derIndex++;
-            secondNextDerCar += max(1, arrivalTime(10));
+            secondNextDerCar += max(1, arrivalTime(averageArrivalTimeRight));
         }
         if (t == secondNextIzqCar) {
             car.id = izqIndex;
@@ -341,17 +341,17 @@ void trafficLightMode(int seconds) {
 
             pthread_create(&carroIzq_t[izqIndex], NULL, trafficLightLeftSideRoutine, &car);
             izqIndex++;
-            secondNextIzqCar += max(1, arrivalTime(10));
+            secondNextIzqCar += max(1, arrivalTime(averageArrivalTimeLeft));
         }
 
         sleep(1);
     }
 
-    for (int i = 0; i < izqIndex; i++) {
+    for (int i = 0; i < izqIndex-1; i++) {
         pthread_join(carroIzq_t[i], NULL);
     }
 
-    for (int i = 0; i < derIndex; i++) {
+    for (int i = 0; i < derIndex-1; i++) {
         pthread_join(carroDer_t[i], NULL);
     }
 
@@ -771,7 +771,7 @@ int main() {
             transitoModo(tiempoSim);
             break;
         default:
-            printf("\n[ERROR] Unknown mode (%d). must be 1, 2 o 3.\n");
+            printf("\n[ERROR] Unknown mode. must be 1, 2 o 3.\n");
             return 0;
     }
     
