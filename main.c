@@ -583,11 +583,13 @@ void* generadorLado2(void* arg) {
 }
 
 void* hiloDibujanteCarnage(void* arg) {
+    printf("\033[H\033[J\033[?25l");
+
     while (activeSimulation) {
-        printf("\033[H\033[J");
+        printf("\033[H");
 
         printf("=============================================================\n");
-        printf("                  ONE WAY BRIDGE SIMULADOR                   \n");
+        printf("                  ONE WAY BRIDGE SIMULATOR                   \n");
         printf("=============================================================\n\n");
 
         printf("         \033[0;37m");
@@ -616,8 +618,13 @@ void* hiloDibujanteCarnage(void* arg) {
         printf("           \033[0;36m");
         for (int i = 0; i < bridgeWeight *3; i++) printf("≈");
         printf("\033[0m\n\n");
+
+        fflush(stdout);
+
         usleep(166666);
     }
+
+    printf("\033[?25h");
     return NULL;
 }
 // ============================================================================================================================
