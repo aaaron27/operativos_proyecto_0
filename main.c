@@ -405,8 +405,9 @@ void trafficLightMode(int seconds) {
 void enterBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
 
-    if (miCarro->type == 1) { // --- LEFT SIDE ---
+    if (miCarro->type == 1) {
         if (miCarro->isAmbulance) ambulancesWaitingLeft++;
+
         while (carsInBridgeRight > 0 ||
             (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0))) {
             pthread_cond_wait(&leftSideCond, &bridgeMutex);
@@ -415,11 +416,8 @@ void enterBridge(Car* miCarro) {
         if (miCarro->isAmbulance) ambulancesWaitingLeft--;
         carsInBridgeLeft++;
 
-        //printf("[Lado 1] ENTRA. (%s) | Vel: %d\n",
-        //miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
-
-    } else { // --- LADO 2 ---
-        if (miCarro->isAmbulance) ambulanciasEsperando2++;
+    } else {
+        if (miCarro->isAmbulance) ambulancesWaitingRight++;
 
         while (carsInBridgeLeft > 0 ||
             (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0)) ||
@@ -427,11 +425,8 @@ void enterBridge(Car* miCarro) {
             pthread_cond_wait(&rightSideCond, &bridgeMutex);
         }
 
-        if (miCarro->isAmbulance) ambulanciasEsperando2--;
-        carrosEnPuenteLado2++;
-
-        //printf("[Lado 2] ENTRA. (%s) | Vel: %d\n",
-        // miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
+        if (miCarro->isAmbulance) ambulancesWaitingRight--;
+        carsInBridgeRight++;
     }
 
     pthread_mutex_unlock(&bridgeMutex);
@@ -441,11 +436,9 @@ void exitBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
 
     if (miCarro->type == 1) {
-        carrosEnPuenteLado1--;
-        //printf("[Lado 1] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
+        carsInBridgeLeft--;
     } else {
-        carrosEnPuenteLado2--;
-        //printf("[Lado 2] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
+        carsInBridgeRight--;
     }
 
     if (carsInBridgeLeft == 0 && carsInBridgeRight == 0) {
