@@ -41,7 +41,13 @@ int ambulancesWaitingRight = 0;
 int* visualBridge;
 int activeSimulation = 1;
 pthread_mutex_t graphicMutex = PTHREAD_MUTEX_INITIALIZER;
-
+int carrosEnPuenteLado1 = 0;
+int carrosEnPuenteLado2 = 0;
+int ambulanciasEsperando1 = 0;
+int ambulanciasEsperando2 = 0;
+int* puenteVisual;
+pthread_mutex_t mutexGrafico = PTHREAD_MUTEX_INITIALIZER;
+int simulacionActiva = 1;
 typedef struct {
     int id;
     int speed;
@@ -87,6 +93,12 @@ void destroyMutexsAndConds() {
 
     free(mutexs);
     free(conds);
+
+    pthread_mutex_destroy(&mutexGrafico);
+    pthread_mutex_destroy(&mutexPuente);
+    pthread_cond_destroy(&condLado1);
+    pthread_cond_destroy(&condLado2);
+    pthread_cond_destroy(&condAmbulancia);
 }
 
 void readConfigFile() {
@@ -365,9 +377,9 @@ void trafficLightMode(int seconds) {
 //     MODO CARNAGE // FIFOOOOO
 // ============================================================================================================================
 
-pthread_mutex_t bridgeMutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t leftSideCond = PTHREAD_COND_INITIALIZER;
-pthread_cond_t rightSideCond = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutexPuente = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condLado1 = PTHREAD_COND_INITIALIZER;
+pthread_cond_t condLado2 = PTHREAD_COND_INITIALIZER;
 
 void enterBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
@@ -385,8 +397,8 @@ void enterBridge(Car* miCarro) {
         //printf("[Lado 1] ENTRA. (%s) | Vel: %d\n",
         //miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
 
-    } else { // --- RIGHT SIDE ---
-        if (miCarro->isAmbulance) ambulancesWaitingRight++;
+    } else { // --- LADO 2 ---
+        if (miCarro->isAmbulance) ambulanciasEsperando2++;
 
         while (carsInBridgeLeft > 0 ||
             (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0)) ||
@@ -394,8 +406,8 @@ void enterBridge(Car* miCarro) {
             pthread_cond_wait(&rightSideCond, &bridgeMutex);
         }
 
-        if (miCarro->isAmbulance) ambulancesWaitingRight--;
-        carsInBridgeRight++;
+        if (miCarro->isAmbulance) ambulanciasEsperando2--;
+        carrosEnPuenteLado2++;
 
         //printf("[Lado 2] ENTRA. (%s) | Vel: %d\n",
         // miCarro->isAmbulance ? "AMBULANCIA" : "Normal", miCarro->speed);
@@ -408,10 +420,10 @@ void exitBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
 
     if (miCarro->type == 1) {
-        carsInBridgeLeft--;
+        carrosEnPuenteLado1--;
         //printf("[Lado 1] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
     } else {
-        carsInBridgeRight--;
+        carrosEnPuenteLado2--;
         //printf("[Lado 2] SALE. (%s)\n", miCarro->isAmbulance ? "AMBULANCIA" : "Normal");
     }
 
@@ -431,8 +443,8 @@ void* carRoutine(void* arg) {
     int tiempoCruce = bridgeWeight / miCarro->speed;
     if (tiempoCruce <= 0) tiempoCruce = 1;
 
-    int microSegundosPorPaso = (tiempoCruce * 1000000) / bridgeWeight;
-    int posActual = (miCarro->type == 1) ? 0 : (bridgeWeight - 1);
+    int microSegundosPorPaso = (tiempoCruce * 1000000) / longitudPuente;
+    int posActual = (miCarro->type == 1) ? 0 : (longitudPuente - 1);
     int direccion = (miCarro->type == 1) ? 1 : -1;
 
     pthread_mutex_lock(&mutexs[posActual]);
@@ -541,7 +553,7 @@ void* generadorLado2(void* arg) {
     return NULL;
 }
 
-void* hiloDibujante(void* arg) {
+void* hiloDibujanteCarnage(void* arg) {
     while (activeSimulation) {
         printf("\033[H\033[J");
 
@@ -549,15 +561,8 @@ void* hiloDibujante(void* arg) {
         printf("                  ONE WAY BRIDGE SIMULADOR                   \n");
         printf("=============================================================\n\n");
 
-        printf("  [ LADO 1 (OESTE) ]                      [ LADO 2 (ESTE) ]\n");
-        printf("  Fila Normal: %d                         Fila Normal: %d\n",
-               (carsInBridgeLeft > 0 ? 0 : 0), (carsInBridgeRight > 0 ? 0 : 0));
-        printf("    Ambulancias: %d                         Ambulancias: %d\n",
-               ambulancesWaitingLeft, ambulancesWaitingRight);
-        printf("-------------------------------------------------------------\n\n");
-
         printf("         \033[0;37m");
-        for (int i = 0; i < bridgeWeight + 4; i++) printf("=");
+        for (int i = 0; i < bridgeWeight*3; i++) printf("=");
         printf("\033[0m\n");
 
         printf("       | \033[100m");
@@ -577,150 +582,366 @@ void* hiloDibujante(void* arg) {
         printf("\033[0m |\n");
 
         printf("         \033[0;37m");
-        for (int i = 0; i < bridgeWeight + 4; i++) printf("=");
+        for (int i = 0; i < bridgeWeight *3; i++) printf("=");
         printf("\033[0m\n");
-        printf("           \033[0;36m≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈ ≈\033[0m\n\n");
+        printf("           \033[0;36m");
+        for (int i = 0; i < bridgeWeight *3; i++) printf("≈");
+        printf("\033[0m\n\n");
+        usleep(166666);
+    }
+    return NULL;
+}
+
+// ============================================================================================================================
+//     MODO 3: OFICIAL DE TRANSITO
+// ============================================================================================================================
+
+pthread_mutex_t mutexTransito = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t condNormalTransito = PTHREAD_COND_INITIALIZER;
+pthread_cond_t condAmbulanciaTransito = PTHREAD_COND_INITIALIZER;
+pthread_cond_t condOficial = PTHREAD_COND_INITIALIZER;
+
+int carsinbridgepolice = 0;
+int direccbridgepolice = -1;
+
+int ambleftbridgepolice = 0;
+int ambrightbridgepolice = 0;
+
+int turnoOficial = 0;
+int vehiculosPasadosTurno = 0;
+int esperandoIzqNormales = 0;
+int esperandoDerNormales = 0;
+
+void* oficialControlador(void* arg) {
+    while(simulacionActiva) {
+        pthread_mutex_lock(&mutexTransito);
+
+        while (esperandoIzqNormales == 0 && esperandoDerNormales == 0 && simulacionActiva) {
+            pthread_cond_wait(&condOficial, &mutexTransito);
+        }
+
+        if (!simulacionActiva) {
+            pthread_mutex_unlock(&mutexTransito);
+            break;
+        }
+
+        if (esperandoIzqNormales > 0) {
+            turnoOficial = 0;
+            vehiculosPasadosTurno = 0;
+            pthread_cond_broadcast(&condNormalTransito);
+
+            while (vehiculosPasadosTurno < k1 && esperandoIzqNormales > 0 &&
+                   ambleftbridgepolice == 0 && ambrightbridgepolice == 0) {
+                pthread_cond_wait(&condOficial, &mutexTransito);
+            }
+        }
+
+        if (esperandoDerNormales > 0) {
+            turnoOficial = 1;
+            vehiculosPasadosTurno = 0;
+            pthread_cond_broadcast(&condNormalTransito);
+
+            while (vehiculosPasadosTurno < k2 && esperandoDerNormales > 0 &&
+                   ambleftbridgepolice == 0 && ambrightbridgepolice == 0) {
+                pthread_cond_wait(&condOficial, &mutexTransito);
+            }
+        }
+
+        pthread_mutex_unlock(&mutexTransito);
+    }
+    return NULL;
+}
+
+void* ladoIzquierdoTransito(void *arg) {
+    Car* miCarro = (Car*)arg;
+    int tiempoCruce = longitudPuente / miCarro->speed;
+    if (tiempoCruce <= 0) tiempoCruce = 1;
+    int microSegundosPorPaso = (tiempoCruce * 1000000) / longitudPuente;
+
+    pthread_mutex_lock(&mutexTransito);
+
+    if (miCarro->isAmbulance) {
+        ambleftbridgepolice++;
+        pthread_cond_signal(&condOficial);
+
+        while (carsinbridgepolice > 0 && direccbridgepolice != 0) {
+            pthread_cond_wait(&condAmbulanciaTransito, &mutexTransito);
+        }
+        ambleftbridgepolice--;
+    } else {
+        esperandoIzqNormales++;
+        pthread_cond_signal(&condOficial);
+
+        while (turnoOficial != 0 || vehiculosPasadosTurno >= k1 ||
+              (carsinbridgepolice > 0 && direccbridgepolice != 0) ||
+              ambleftbridgepolice > 0 || ambrightbridgepolice > 0) {
+            pthread_cond_wait(&condNormalTransito, &mutexTransito);
+        }
+
+        esperandoIzqNormales--;
+        vehiculosPasadosTurno++;
+        pthread_cond_signal(&condOficial);
+    }
+
+    carsinbridgepolice++;
+    direccbridgepolice = 0;
+    pthread_mutex_unlock(&mutexTransito);
+
+    int posActual = 0;
+    pthread_mutex_lock(&mutexs[posActual]);
+    pthread_mutex_lock(&mutexGrafico);
+    puenteVisual[posActual] = miCarro->isAmbulance ? 3 : 1;
+    pthread_mutex_unlock(&mutexGrafico);
+    usleep(microSegundosPorPaso);
+
+    for (int paso = 1; paso < longitudPuente; paso++) {
+        int posSiguiente = posActual + 1;
+        pthread_mutex_lock(&mutexs[posSiguiente]);
+
+        pthread_mutex_lock(&mutexGrafico);
+        puenteVisual[posActual] = 0;
+        puenteVisual[posSiguiente] = miCarro->isAmbulance ? 3 : 1;
+        pthread_mutex_unlock(&mutexGrafico);
+
+        pthread_mutex_unlock(&mutexs[posActual]);
+        posActual = posSiguiente;
+        usleep(microSegundosPorPaso);
+    }
+
+    pthread_mutex_lock(&mutexGrafico);
+    puenteVisual[posActual] = 0;
+    pthread_mutex_unlock(&mutexGrafico);
+    pthread_mutex_unlock(&mutexs[posActual]);
+
+    pthread_mutex_lock(&mutexTransito);
+    carsinbridgepolice--;
+    if (carsinbridgepolice == 0) {
+        direccbridgepolice = -1;
+        pthread_cond_broadcast(&condNormalTransito);
+        pthread_cond_broadcast(&condAmbulanciaTransito);
+        pthread_cond_signal(&condOficial);
+    }
+    pthread_mutex_unlock(&mutexTransito);
+
+    free(miCarro);
+    return NULL;
+}
+
+void* ladoDerechoTransito(void *arg) {
+    Car* miCarro = (Car*)arg;
+    int tiempoCruce = longitudPuente / miCarro->speed;
+    if (tiempoCruce <= 0) tiempoCruce = 1;
+    int microSegundosPorPaso = (tiempoCruce * 1000000) / longitudPuente;
+
+    pthread_mutex_lock(&mutexTransito);
+
+    if (miCarro->isAmbulance) {
+        ambrightbridgepolice++;
+        pthread_cond_signal(&condOficial);
+
+        while (carsinbridgepolice > 0 && direccbridgepolice != 1) {
+            pthread_cond_wait(&condAmbulanciaTransito, &mutexTransito);
+        }
+        ambrightbridgepolice--;
+    } else {
+        esperandoDerNormales++;
+        pthread_cond_signal(&condOficial);
+
+        while (turnoOficial != 1 || vehiculosPasadosTurno >= k2 ||
+              (carsinbridgepolice > 0 && direccbridgepolice != 1) ||
+              ambleftbridgepolice > 0 || ambrightbridgepolice > 0) {
+            pthread_cond_wait(&condNormalTransito, &mutexTransito);
+        }
+
+        esperandoDerNormales--;
+        vehiculosPasadosTurno++;
+        pthread_cond_signal(&condOficial);
+    }
+
+    carsinbridgepolice++;
+    direccbridgepolice = 1;
+    pthread_mutex_unlock(&mutexTransito);
+
+    int posActual = longitudPuente - 1;
+    pthread_mutex_lock(&mutexs[posActual]);
+    pthread_mutex_lock(&mutexGrafico);
+    puenteVisual[posActual] = miCarro->isAmbulance ? 4 : 2;
+    pthread_mutex_unlock(&mutexGrafico);
+    usleep(microSegundosPorPaso);
+
+    for (int paso = 1; paso < longitudPuente; paso++) {
+        int posSiguiente = posActual - 1;
+        pthread_mutex_lock(&mutexs[posSiguiente]);
+
+        pthread_mutex_lock(&mutexGrafico);
+        puenteVisual[posActual] = 0;
+        puenteVisual[posSiguiente] = miCarro->isAmbulance ? 4 : 2;
+        pthread_mutex_unlock(&mutexGrafico);
+
+        pthread_mutex_unlock(&mutexs[posActual]);
+        posActual = posSiguiente;
+        usleep(microSegundosPorPaso);
+    }
+
+    pthread_mutex_lock(&mutexGrafico);
+    puenteVisual[posActual] = 0;
+    pthread_mutex_unlock(&mutexGrafico);
+    pthread_mutex_unlock(&mutexs[posActual]);
+
+    pthread_mutex_lock(&mutexTransito);
+    carsinbridgepolice--;
+    if (carsinbridgepolice == 0) {
+        direccbridgepolice = -1;
+        pthread_cond_broadcast(&condNormalTransito);
+        pthread_cond_broadcast(&condAmbulanciaTransito);
+        pthread_cond_signal(&condOficial);
+    }
+    pthread_mutex_unlock(&mutexTransito);
+
+    free(miCarro);
+    return NULL;
+}
+
+void* generadorLado1Transito(void* arg) {
+    int tiempoSimulacion = *(int*)arg;
+    int totalCarros = cantidadCarrosEnTiempoX(tiempoSimulacion, mediaLLegada1);
+
+    if (totalCarros > 0) {
+        int tiempos[totalCarros];
+        generarTiemposAbsolutos(totalCarros, mediaLLegada1, tiempos);
+        int tiempoActual = 0;
+
+        for (int i = 0; i < totalCarros; i++) {
+            int espera = tiempos[i] - tiempoActual;
+            if (espera > 0) { sleep(espera); tiempoActual += espera; }
+
+            Car* nuevoCarro = (Car*)malloc(sizeof(Car));
+            nuevoCarro->id = i + 1;
+            nuevoCarro->horaLlegada = tiempos[i];
+            nuevoCarro->speed = generarVelocidad(velocidadPromedio1, minVelocidad1, maxVelocidad1);
+            nuevoCarro->isAmbulance = esAmbulancia(porcentajeAmbulancias);
+            nuevoCarro->type = 1;
+
+            pthread_t hiloCarro;
+            pthread_create(&hiloCarro, NULL, ladoIzquierdoTransito, (void*)nuevoCarro);
+            pthread_detach(hiloCarro);
+        }
+    }
+    return NULL;
+}
+
+void* generadorLado2Transito(void* arg) {
+    int tiempoSimulacion = *(int*)arg;
+    int totalCarros = cantidadCarrosEnTiempoX(tiempoSimulacion, mediaLLegada2);
+
+    if (totalCarros > 0) {
+        int tiempos[totalCarros];
+        generarTiemposAbsolutos(totalCarros, mediaLLegada2, tiempos);
+        int tiempoActual = 0;
+
+        for (int i = 0; i < totalCarros; i++) {
+            int espera = tiempos[i] - tiempoActual;
+            if (espera > 0) { sleep(espera); tiempoActual += espera; }
+
+            Car* nuevoCarro = (Car*)malloc(sizeof(Car));
+            nuevoCarro->id = i + 1;
+            nuevoCarro->horaLlegada = tiempos[i];
+            nuevoCarro->speed = generarVelocidad(velocidadPromedio2, minVelocidad2, maxVelocidad2);
+            nuevoCarro->isAmbulance = esAmbulancia(porcentajeAmbulancias);
+            nuevoCarro->type = 2;
+
+            pthread_t hiloCarro;
+            pthread_create(&hiloCarro, NULL, ladoDerechoTransito, (void*)nuevoCarro);
+            pthread_detach(hiloCarro);
+        }
+    }
+    return NULL;
+}
+void* hiloDibujanteTransito(void* arg) {
+    while (simulacionActiva) {
+        printf("\033[H\033[J");
+
+        printf("=============================================================\n");
+        printf("            SIMULADOR DE PUENTE - MODO TRANSITO              \n");
+        printf("=============================================================\n\n");
+
+        // --- ESTADO DEL OFICIAL ---
+        printf("  👮 ESTADO DEL OFICIAL:\n");
+        if (turnoOficial == 0) {
+            printf("  Dando paso a: [LADO 1 / OESTE]  (Han cruzado %d de %d cupos)\n\n", vehiculosPasadosTurno, k1);
+        } else {
+            printf("  Dando paso a: [LADO 2 / ESTE]   (Han cruzado %d de %d cupos)\n\n", vehiculosPasadosTurno, k2);
+        }
+
+        printf("  [ LADO 1 (OESTE) ]                      [ LADO 2 (ESTE) ]\n");
+        printf("  Fila Normal: %d                         Fila Normal: %d\n",
+               esperandoIzqNormales, esperandoDerNormales);
+        printf("  Ambulancias: %d                         Ambulancias: %d\n",
+               ambulanciasIzqTransito, ambulanciasDerTransito);
+        printf("-------------------------------------------------------------\n\n");
+
+        printf("         \033[0;37m");
+        int numcalles = longitudPuente * 3;
+        for (int i = 0; i < numcalles; i++) printf("=");
+        printf("\033[0m\n");
+
+        printf("       | \033[100m");
+
+        pthread_mutex_lock(&mutexGrafico);
+        for (int i = 0; i < longitudPuente; i++) {
+            switch(puenteVisual[i]) {
+                case 0: printf("\033[100;37m ░ \033[0m\033[100m"); break;
+                case 1: printf("\033[44;1;37m > \033[0m\033[100m"); break;
+                case 2: printf("\033[42;1;37m < \033[0m\033[100m"); break;
+                case 3: printf("\033[41;1;33mA >\033[0m\033[100m"); break;
+                case 4: printf("\033[41;1;33m< A\033[0m\033[100m"); break;
+            }
+        }
+        pthread_mutex_unlock(&mutexGrafico);
+
+        printf("\033[0m |\n");
+
+        printf("         \033[0;37m");
+        for (int i = 0; i < numcalles; i++) {
+            printf("=");
+        }
+        printf("\033[0m\n");
+
+        printf("         \033[0;36m");
+        int numOlas = longitudPuente * 3;
+        for (int i = 0; i < numOlas; i++) {
+            printf("≈");
+        }
+        printf("\033[0m\n");
 
         usleep(166666);
     }
     return NULL;
 }
 
-void* ladoIzquierdoTransito(void *arg) {
-    Car car = *(Car*)arg;
-    double secondsPerMutex = 1.0/car.speed;
+void transitoModo(int tiempoSim) {
+    simulacionActiva = 1;
 
-    pthread_mutex_lock(&trafficLightMutex);
-    printf("[Side I] %s %d ready\n", car.isAmbulance ? "Ambulance" : "Car", car.id);
+    pthread_t dibujante;
+    pthread_create(&dibujante, NULL, hiloDibujante, NULL);
 
-    // todo
-    if (car.isAmbulance) {
-        ambulancesWaitingLeft++;
+    pthread_t oficial;
+    pthread_create(&oficial, NULL, oficialControlador, NULL);
 
-        while (carInBridge > 0 && bridgeDirection != 0) {
-            printf("[Side I] Ambulance %d waiting for bridge to clear\n", car.id);
-            pthread_cond_wait(&condAmbulance, &trafficLightMutex);
-        }
+    pthread_t gen1, gen2;
+    pthread_create(&gen1, NULL, generadorLado1Transito, &tiempoSim);
+    pthread_create(&gen2, NULL, generadorLado2Transito, &tiempoSim);
 
-        ambulancesWaitingLeft--;
-    } else {
-        
-    }
+    pthread_join(gen1, NULL);
+    pthread_join(gen2, NULL);
 
-    carInBridge++;
-    bridgeDirection = 0;
-    pthread_mutex_unlock(&trafficLightMutex);
+    sleep(10);
 
-    for (int i = 0; i < bridgeWeight; i++) {
-        pthread_mutex_lock(&mutexs[i]);
-        printf("[Side I] Car %d in block %d\n", car.id, i);
-        usleep(secondsPerMutex * 1000000);
-        pthread_mutex_unlock(&mutexs[i]);
-    }
+    simulacionActiva = 0;
+    pthread_cond_signal(&condOficial);
 
-    pthread_mutex_lock(&trafficLightMutex);
-    carInBridge--;
-
-    if (!carInBridge) {
-        bridgeDirection = -1;
-        pthread_cond_broadcast(&condCounter);
-        pthread_cond_broadcast(&condAmbulance);
-    }
-
-    pthread_mutex_unlock(&trafficLightMutex);
-    printf("[Side I] Car %d terminate\n", car.id);
-    return NULL;
-}
-
-void* ladoDerechoTransito(void *arg) {
-    Car car = *(Car*)arg;
-    double secondsPerMutex = 1.0/car.speed;
-
-    pthread_mutex_lock(&trafficLightMutex);
-    printf("[Side D] %s %d ready\n", car.isAmbulance ? "Ambulance" : "Car", car.id);
-
-    // todo
-    if (car.isAmbulance) {
-        ambulancesWaitingRight++;
-
-        while (carInBridge > 0 && bridgeDirection != 1) {
-            printf("[Side D] Ambulance %d waiting for bridge to clear\n", car.id);
-            pthread_cond_wait(&condAmbulance, &trafficLightMutex);
-        }
-
-        ambulancesWaitingRight--;
-    } else {
-
-    }
-
-    carInBridge++;
-    bridgeDirection = 1;
-    pthread_mutex_unlock(&trafficLightMutex);
-
-    for (int i = bridgeWeight - 1; i >= 0; i--) {
-        pthread_mutex_lock(&mutexs[i]);
-        printf("[Side D] Car %d in block %d\n", car.id, i);
-        usleep(secondsPerMutex * 1000000);
-        pthread_mutex_unlock(&mutexs[i]);
-    }
-
-    pthread_mutex_lock(&trafficLightMutex);
-    carInBridge--;
-
-    if (!carInBridge) {
-        bridgeDirection = -1;
-        pthread_cond_broadcast(&condCounter);
-        pthread_cond_broadcast(&condAmbulance);
-    }
-
-    pthread_mutex_unlock(&trafficLightMutex);
-    printf("[Side D] Car %d terminate\n", car.id);
-    return NULL;
-}
-
-void transitoModo(int seconds) {
-    pthread_t carroIzq_t[seconds];
-    pthread_t carroDer_t[seconds];
-
-    int izqIndex = 0;
-    int derIndex = 0;
-
-    int secondNextDerCar = arrivalTime(10);
-    int secondNextIzqCar = arrivalTime(10);
-    Car car;
-
-    for (int t = 1; t <= seconds; t++) {
-        if (t == secondNextDerCar) {
-            car.id = derIndex;
-            car.speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
-            car.arrivalTime = t;
-            car.isAmbulance = isAmbulance(ambulancesPercentage);
-
-            pthread_create(&carroIzq_t[derIndex], NULL, ladoDerechoTransito, &car);
-            derIndex++;
-            secondNextDerCar += max(1, arrivalTime(10));
-        }
-        if (t == secondNextIzqCar) {
-            car.id = izqIndex;
-            car.speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
-            car.arrivalTime = t;
-            car.isAmbulance = isAmbulance(ambulancesPercentage);
-
-            pthread_create(&carroIzq_t[izqIndex], NULL, ladoIzquierdoTransito, &car);
-            izqIndex++;
-            secondNextIzqCar += max(1, arrivalTime(10));
-        }
-
-        sleep(1);
-    }
-
-    for (int i = 0; i < izqIndex; i++) {
-        pthread_join(carroIzq_t[i], NULL);
-    }
-
-    for (int i = 0; i < derIndex; i++) {
-        pthread_join(carroDer_t[i], NULL);
-    }
+    pthread_join(oficial, NULL);
+    pthread_join(dibujante, NULL);
 }
 
 int main() {
@@ -728,11 +949,11 @@ int main() {
 
     readConfigFile();
 
-    // init conditional vars and mutexs
+    // init cond vars and mutexs
     mutexsInit();
 
-    visualBridge = (int*)calloc(bridgeWeight, sizeof(int));
-    printf("Simulation time in seconds? ");
+    puenteVisual = (int*)calloc(longitudPuente, sizeof(int));
+    printf("Cuanto va a durar la simulacion? ");
     int tiempoSim;
     scanf("%d", &tiempoSim);
     printf("      ONE WAY BRIDGE SIMULATION - START       \n");
@@ -750,7 +971,7 @@ int main() {
             printf("Carnage (FIFO)...\n\n");
             activeSimulation = 1;
             pthread_t dibujante;
-            pthread_create(&dibujante, NULL, hiloDibujante, NULL);
+            pthread_create(&dibujante, NULL, hiloDibujanteCarnage, NULL);
             pthread_t gen1, gen2;
             pthread_create(&gen1, NULL, generadorLado1, &tiempoSim);
             pthread_create(&gen2, NULL, generadorLado2, &tiempoSim);
@@ -768,18 +989,23 @@ int main() {
             trafficLightMode(tiempoSim);
             break;
         case 3:
+            printf("Iniciando modalidad Oficial de Transito...\n\n");
             transitoModo(tiempoSim);
+            printf("Simulacion finalizada.\n");
             break;
         default:
             printf("\n[ERROR] Unknown mode. must be 1, 2 o 3.\n");
             return 0;
     }
     
-    // mutex and conds destroy
-    pthread_mutex_destroy(&graphicMutex);
-    pthread_mutex_destroy(&bridgeMutex);
+    // destruir el mutex
+    pthread_mutex_destroy(&mutex);
+    pthread_mutex_destroy(&mutexGrafico);
+    pthread_mutex_destroy(&mutexPuente);
 
-    free(visualBridge);
+    pthread_cond_destroy(&cond);
+
+    free(puenteVisual);
     destroyMutexsAndConds();
     return 0;
 }
