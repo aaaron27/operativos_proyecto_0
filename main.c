@@ -56,6 +56,10 @@ typedef struct {
     int type;
 } Car;
 
+int totalActiveCars = 0;
+pthread_mutex_t activeCarsMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t allCarsFinishedCond = PTHREAD_COND_INITIALIZER;
+
 pthread_mutex_t trafficLightMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t trafficLightCond = PTHREAD_COND_INITIALIZER;
 
@@ -490,31 +494,37 @@ void trafficLightMode(int seconds) {
     pthread_join(trafficLightController, NULL);
     pthread_join(graphicThread, NULL);
 }
+// ============================================================================================================================
+//     MODO CARNAGE // FIFOOOOO
+// ============================================================================================================================
 
-// ========================================================================================
-//     CARNAGE MODE (FIFO)
-// ========================================================================================
+
 
 void enterBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
 
     if (miCarro->type == 1) {
         if (miCarro->isAmbulance) ambulancesWaitingLeft++;
+
         while (carsInBridgeRight > 0 ||
-               (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0))) {
+            (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0))) {
             pthread_cond_wait(&leftSideCond, &bridgeMutex);
         }
+
         if (miCarro->isAmbulance) ambulancesWaitingLeft--;
         carsInBridgeLeft++;
+
     } else {
-        if (miCarro->isAmbulance) ambulanciasEsperando2++;
+        if (miCarro->isAmbulance) ambulancesWaitingRight++;
+
         while (carsInBridgeLeft > 0 ||
-               (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0)) ||
-               (miCarro->isAmbulance && ambulancesWaitingLeft > 0)) {
+            (!miCarro->isAmbulance && (ambulancesWaitingLeft > 0 || ambulancesWaitingRight > 0)) ||
+            (miCarro->isAmbulance && ambulancesWaitingLeft > 0)) {
             pthread_cond_wait(&rightSideCond, &bridgeMutex);
         }
-        if (miCarro->isAmbulance) ambulanciasEsperando2--;
-        carrosEnPuenteLado2++;
+
+        if (miCarro->isAmbulance) ambulancesWaitingRight--;
+        carsInBridgeRight++;
     }
 
     pthread_mutex_unlock(&bridgeMutex);
@@ -524,9 +534,9 @@ void exitBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
 
     if (miCarro->type == 1) {
-        carrosEnPuenteLado1--;
+        carsInBridgeLeft--;
     } else {
-        carrosEnPuenteLado2--;
+        carsInBridgeRight--;
     }
 
     if (carsInBridgeLeft == 0 && carsInBridgeRight == 0) {
@@ -546,8 +556,8 @@ void* carRoutine(void* arg) {
     if (tiempoCruce <= 0) tiempoCruce = 1;
 
     int microSegundosPorPaso = (tiempoCruce * 1000000) / bridgeWeight;
-    int posActual  = (miCarro->type == 1) ? 0 : (bridgeWeight - 1);
-    int direccion  = (miCarro->type == 1) ? 1 : -1;
+    int posActual = (miCarro->type == 1) ? 0 : (bridgeWeight - 1);
+    int direccion = (miCarro->type == 1) ? 1 : -1;
 
     pthread_mutex_lock(&mutexs[posActual]);
 
@@ -563,12 +573,14 @@ void* carRoutine(void* arg) {
         pthread_mutex_lock(&mutexs[posSiguiente]);
 
         pthread_mutex_lock(&graphicMutex);
-        visualBridge[posActual]    = 0;
+        visualBridge[posActual] = 0;
         visualBridge[posSiguiente] = miCarro->isAmbulance ? (miCarro->type == 1 ? 3 : 4) : miCarro->type;
         pthread_mutex_unlock(&graphicMutex);
 
         pthread_mutex_unlock(&mutexs[posActual]);
+
         posActual = posSiguiente;
+
         usleep(microSegundosPorPaso);
     }
 
@@ -579,7 +591,14 @@ void* carRoutine(void* arg) {
     pthread_mutex_unlock(&mutexs[posActual]);
 
     exitBridge(miCarro);
+
     free(miCarro);
+    pthread_mutex_lock(&activeCarsMutex);
+    totalActiveCars--;
+    if (totalActiveCars == 0) {
+        pthread_cond_broadcast(&allCarsFinishedCond);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
     return NULL;
 }
 
@@ -588,21 +607,30 @@ void* generadorLado1(void* arg) {
     int totalCarros = cantCarsInTimeX(tiempoSimulacion, averageArrivalTimeLeft);
 
     if (totalCarros > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCarros;
+        pthread_mutex_unlock(&activeCarsMutex);
         int tiempos[totalCarros];
         generateAbsoluteTimes(totalCarros, averageArrivalTimeLeft, tiempos);
+
         int tiempoActual = 0;
-        int contadorId   = 1;
+        int contadorId = 1;
 
         for (int i = 0; i < totalCarros; i++) {
             int espera = tiempos[i] - tiempoActual;
-            if (espera > 0) { sleep(espera); tiempoActual += espera; }
 
+            if (espera > 0) {
+                sleep(espera);
+                tiempoActual += espera;
+            }
+
+            // --- NACE EL CARRO ---
             Car* nuevoCarro = (Car*)malloc(sizeof(Car));
-            nuevoCarro->id          = contadorId++;
+            nuevoCarro->id = contadorId++;
             nuevoCarro->arrivalTime = tiempos[i];
-            nuevoCarro->speed       = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
+            nuevoCarro->speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
             nuevoCarro->isAmbulance = isAmbulance(ambulancesPercentage);
-            nuevoCarro->type        = 1;
+            nuevoCarro->type = 1;
 
             pthread_t hiloCarro;
             pthread_create(&hiloCarro, NULL, carRoutine, (void*)nuevoCarro);
@@ -617,21 +645,29 @@ void* generadorLado2(void* arg) {
     int totalCarros = cantCarsInTimeX(tiempoSimulacion, averageArrivalTimeRight);
 
     if (totalCarros > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCarros;
+        pthread_mutex_unlock(&activeCarsMutex);
         int tiempos[totalCarros];
         generateAbsoluteTimes(totalCarros, averageArrivalTimeRight, tiempos);
+
         int tiempoActual = 0;
-        int contadorId   = 1;
+        int contadorId = 1;
 
         for (int i = 0; i < totalCarros; i++) {
             int espera = tiempos[i] - tiempoActual;
-            if (espera > 0) { sleep(espera); tiempoActual += espera; }
+
+            if (espera > 0) {
+                sleep(espera);
+                tiempoActual += espera;
+            }
 
             Car* nuevoCarro = (Car*)malloc(sizeof(Car));
-            nuevoCarro->id          = contadorId++;
+            nuevoCarro->id = contadorId++;
             nuevoCarro->arrivalTime = tiempos[i];
-            nuevoCarro->speed       = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
+            nuevoCarro->speed = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
             nuevoCarro->isAmbulance = isAmbulance(ambulancesPercentage);
-            nuevoCarro->type        = 2;
+            nuevoCarro->type = 2;
 
             pthread_t hiloCarro;
             pthread_create(&hiloCarro, NULL, carRoutine, (void*)nuevoCarro);
@@ -642,27 +678,29 @@ void* generadorLado2(void* arg) {
 }
 
 void* hiloDibujanteCarnage(void* arg) {
+    printf("\033[H\033[J\033[?25l");
+
     while (activeSimulation) {
-        printf("\033[H\033[J");
+        printf("\033[H");
 
         printf("=============================================================\n");
-        printf("                  ONE WAY BRIDGE SIMULADOR                   \n");
+        printf("                  ONE WAY BRIDGE SIMULATOR                   \n");
         printf("=============================================================\n\n");
 
         printf("         \033[0;37m");
-        for (int i = 0; i < bridgeWeight * 3; i++) printf("=");
+        for (int i = 0; i < bridgeWeight*3; i++) printf("=");
         printf("\033[0m\n");
 
         printf("       | \033[100m");
 
         pthread_mutex_lock(&graphicMutex);
         for (int i = 0; i < bridgeWeight; i++) {
-            switch (visualBridge[i]) {
-                case 0: printf("\033[100;37m . \033[0m\033[100m"); break;
+            switch(visualBridge[i]) {
+                case 0: printf("\033[100;37m ░ \033[0m\033[100m"); break;
                 case 1: printf("\033[44;1;37m > \033[0m\033[100m"); break;
                 case 2: printf("\033[42;1;37m < \033[0m\033[100m"); break;
-                case 3: printf("\033[41;1;33mA>\033[0m\033[100m");  break;
-                case 4: printf("\033[41;1;33m<A\033[0m\033[100m");  break;
+                case 3: printf("\033[41;1;33mA >\033[0m\033[100m"); break;
+                case 4: printf("\033[41;1;33m< A\033[0m\033[100m"); break;
             }
         }
         pthread_mutex_unlock(&graphicMutex);
@@ -670,23 +708,26 @@ void* hiloDibujanteCarnage(void* arg) {
         printf("\033[0m |\n");
 
         printf("         \033[0;37m");
-        for (int i = 0; i < bridgeWeight * 3; i++) printf("=");
+        for (int i = 0; i < bridgeWeight *3; i++) printf("=");
         printf("\033[0m\n");
         printf("           \033[0;36m");
-        for (int i = 0; i < bridgeWeight * 3; i++) printf("~");
+        for (int i = 0; i < bridgeWeight *3; i++) printf("≈");
         printf("\033[0m\n\n");
+
+        fflush(stdout);
 
         usleep(166666);
     }
+
+    printf("\033[?25h");
     return NULL;
 }
-
-// ========================================================================================
-//     TRAFFIC OFFICER MODE
-// ========================================================================================
+// ============================================================================================================================
+//     MODE TRAFFIC OFFICER
+// ============================================================================================================================
 
 void* trafficOfficerController(void* arg) {
-    while (activeSimulation) {
+    while(activeSimulation) {
         pthread_mutex_lock(&officerMutex);
 
         while (waitingLeftNormal == 0 && waitingRightNormal == 0 && activeSimulation) {
@@ -746,8 +787,8 @@ void* trafficOfficerLeftSideRoutine(void *arg) {
         pthread_cond_signal(&officerWakeupCond);
 
         while (officerTurn != 0 || carsPassedThisTurn >= k1 ||
-               (officerCarsInBridge > 0 && officerBridgeDirection != 0) ||
-               officerAmbulancesLeft > 0 || officerAmbulancesRight > 0) {
+              (officerCarsInBridge > 0 && officerBridgeDirection != 0) ||
+              officerAmbulancesLeft > 0 || officerAmbulancesRight > 0) {
             pthread_cond_wait(&officerNormalCond, &officerMutex);
         }
 
@@ -773,7 +814,7 @@ void* trafficOfficerLeftSideRoutine(void *arg) {
 
         pthread_mutex_lock(&graphicMutex);
         visualBridge[currentPos] = 0;
-        visualBridge[nextPos]    = car->isAmbulance ? 3 : 1;
+        visualBridge[nextPos] = car->isAmbulance ? 3 : 1;
         pthread_mutex_unlock(&graphicMutex);
 
         pthread_mutex_unlock(&mutexs[currentPos]);
@@ -792,11 +833,17 @@ void* trafficOfficerLeftSideRoutine(void *arg) {
         officerBridgeDirection = -1;
         pthread_cond_broadcast(&officerNormalCond);
         pthread_cond_broadcast(&officerAmbulanceCond);
-        pthread_cond_signal(&officerWakeupCond);
+        pthread_cond_signal(&officerWakeupCond); // Bridge empty, officer checks queues
     }
     pthread_mutex_unlock(&officerMutex);
 
     free(car);
+    pthread_mutex_lock(&activeCarsMutex);
+    totalActiveCars--;
+    if (totalActiveCars == 0) {
+        pthread_cond_broadcast(&allCarsFinishedCond);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
     return NULL;
 }
 
@@ -821,8 +868,8 @@ void* trafficOfficerRightSideRoutine(void *arg) {
         pthread_cond_signal(&officerWakeupCond);
 
         while (officerTurn != 1 || carsPassedThisTurn >= k2 ||
-               (officerCarsInBridge > 0 && officerBridgeDirection != 1) ||
-               officerAmbulancesLeft > 0 || officerAmbulancesRight > 0) {
+              (officerCarsInBridge > 0 && officerBridgeDirection != 1) ||
+              officerAmbulancesLeft > 0 || officerAmbulancesRight > 0) {
             pthread_cond_wait(&officerNormalCond, &officerMutex);
         }
 
@@ -848,7 +895,7 @@ void* trafficOfficerRightSideRoutine(void *arg) {
 
         pthread_mutex_lock(&graphicMutex);
         visualBridge[currentPos] = 0;
-        visualBridge[nextPos]    = car->isAmbulance ? 4 : 2;
+        visualBridge[nextPos] = car->isAmbulance ? 4 : 2;
         pthread_mutex_unlock(&graphicMutex);
 
         pthread_mutex_unlock(&mutexs[currentPos]);
@@ -872,6 +919,12 @@ void* trafficOfficerRightSideRoutine(void *arg) {
     pthread_mutex_unlock(&officerMutex);
 
     free(car);
+    pthread_mutex_lock(&activeCarsMutex);
+    totalActiveCars--;
+    if (totalActiveCars == 0) {
+        pthread_cond_broadcast(&allCarsFinishedCond);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
     return NULL;
 }
 
@@ -880,6 +933,9 @@ void* generatorLeftSideOfficer(void* arg) {
     int totalCars = cantCarsInTimeX(simTime, averageArrivalTimeLeft);
 
     if (totalCars > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCars;
+        pthread_mutex_unlock(&activeCarsMutex);
         int absoluteTimes[totalCars];
         generateAbsoluteTimes(totalCars, averageArrivalTimeLeft, absoluteTimes);
         int currentTime = 0;
@@ -889,11 +945,11 @@ void* generatorLeftSideOfficer(void* arg) {
             if (waitTime > 0) { sleep(waitTime); currentTime += waitTime; }
 
             Car* newCar = (Car*)malloc(sizeof(Car));
-            newCar->id          = i + 1;
+            newCar->id = i + 1;
             newCar->arrivalTime = absoluteTimes[i];
-            newCar->speed       = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
+            newCar->speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
             newCar->isAmbulance = isAmbulance(ambulancesPercentage);
-            newCar->type        = 1;
+            newCar->type = 1;
 
             pthread_t carThread;
             pthread_create(&carThread, NULL, trafficOfficerLeftSideRoutine, (void*)newCar);
@@ -908,6 +964,9 @@ void* generatorRightSideOfficer(void* arg) {
     int totalCars = cantCarsInTimeX(simTime, averageArrivalTimeRight);
 
     if (totalCars > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCars;
+        pthread_mutex_unlock(&activeCarsMutex);
         int absoluteTimes[totalCars];
         generateAbsoluteTimes(totalCars, averageArrivalTimeRight, absoluteTimes);
         int currentTime = 0;
@@ -917,11 +976,11 @@ void* generatorRightSideOfficer(void* arg) {
             if (waitTime > 0) { sleep(waitTime); currentTime += waitTime; }
 
             Car* newCar = (Car*)malloc(sizeof(Car));
-            newCar->id          = i + 1;
+            newCar->id = i + 1;
             newCar->arrivalTime = absoluteTimes[i];
-            newCar->speed       = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
+            newCar->speed = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
             newCar->isAmbulance = isAmbulance(ambulancesPercentage);
-            newCar->type        = 2;
+            newCar->type = 2;
 
             pthread_t carThread;
             pthread_create(&carThread, NULL, trafficOfficerRightSideRoutine, (void*)newCar);
@@ -962,12 +1021,12 @@ void* graphicThreadOfficer(void* arg) {
 
         pthread_mutex_lock(&graphicMutex);
         for (int i = 0; i < bridgeWeight; i++) {
-            switch (visualBridge[i]) {
-                case 0: printf("\033[100;37m . \033[0m\033[100m"); break;
+            switch(visualBridge[i]) {
+                case 0: printf("\033[100;37m ░ \033[0m\033[100m"); break;
                 case 1: printf("\033[44;1;37m > \033[0m\033[100m"); break;
                 case 2: printf("\033[42;1;37m < \033[0m\033[100m"); break;
-                case 3: printf("\033[41;1;33mA>\033[0m\033[100m");  break;
-                case 4: printf("\033[41;1;33m<A\033[0m\033[100m");  break;
+                case 3: printf("\033[41;1;33mA >\033[0m\033[100m"); break;
+                case 4: printf("\033[41;1;33m< A\033[0m\033[100m"); break;
             }
         }
         pthread_mutex_unlock(&graphicMutex);
@@ -975,11 +1034,15 @@ void* graphicThreadOfficer(void* arg) {
         printf("\033[0m |\n");
 
         printf("         \033[0;37m");
-        for (int i = 0; i < bridgeVisualLength; i++) printf("=");
+        for (int i = 0; i < bridgeVisualLength; i++) {
+            printf("=");
+        }
         printf("\033[0m\n");
 
         printf("         \033[0;36m");
-        for (int i = 0; i < bridgeVisualLength; i++) printf("~");
+        for (int i = 0; i < bridgeVisualLength; i++) {
+            printf("≈");
+        }
         printf("\033[0m\n");
 
         usleep(166666);
@@ -1003,7 +1066,11 @@ void trafficOfficerMode(int simTime) {
     pthread_join(gen1, NULL);
     pthread_join(gen2, NULL);
 
-    sleep(10);
+    pthread_mutex_lock(&activeCarsMutex);
+    while (totalActiveCars > 0) {
+        pthread_cond_wait(&allCarsFinishedCond, &activeCarsMutex);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
 
     activeSimulation = 0;
     pthread_cond_signal(&officerWakeupCond);
@@ -1012,22 +1079,18 @@ void trafficOfficerMode(int simTime) {
     pthread_join(graphicThread, NULL);
 }
 
-// ========================================================================================
-//     MAIN
-// ========================================================================================
-
 int main() {
     srand(time(NULL));
 
     readConfigFile();
+
+    // init cond vars and mutexs
     mutexsInit();
 
     visualBridge = (int*)calloc(bridgeWeight, sizeof(int));
-
     printf("Cuanto va a durar la simulacion? ");
     int tiempoSim;
     scanf("%d", &tiempoSim);
-
     printf("      ONE WAY BRIDGE SIMULATION - START       \n");
     printf("Select a mode:\n");
     printf("1. Carnage (FIFO)\n");
@@ -1051,7 +1114,12 @@ int main() {
             pthread_join(gen1, NULL);
             pthread_join(gen2, NULL);
 
-            sleep(10);
+            pthread_mutex_lock(&activeCarsMutex);
+            while (totalActiveCars > 0) {
+                // El main se duerme hasta que escuche que los carros llegaron a 0
+                pthread_cond_wait(&allCarsFinishedCond, &activeCarsMutex);
+            }
+            pthread_mutex_unlock(&activeCarsMutex);
             printf("Simulation Finished.\n");
 
             activeSimulation = 0;
@@ -1066,11 +1134,10 @@ int main() {
             printf("Simulacion finalizada.\n");
             break;
         default:
-            printf("\n[ERROR] Unknown mode. must be 1, 2 or 3.\n");
-            free(visualBridge);
-            destroyMutexsAndConds();
+            printf("\n[ERROR] Unknown mode. must be 1, 2 o 3.\n");
             return 0;
     }
+
 
     free(visualBridge);
     destroyMutexsAndConds();
