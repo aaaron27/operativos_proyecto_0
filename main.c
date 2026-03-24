@@ -55,6 +55,9 @@ typedef struct {
     int arrivalTime;
     int type;
 } Car;
+int totalActiveCars = 0;
+pthread_mutex_t activeCarsMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t allCarsFinishedCond = PTHREAD_COND_INITIALIZER;
 
 pthread_mutex_t trafficLightMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t trafficLightCond = PTHREAD_COND_INITIALIZER;
@@ -495,6 +498,12 @@ void* carRoutine(void* arg) {
     exitBridge(miCarro);
 
     free(miCarro);
+    pthread_mutex_lock(&activeCarsMutex);
+    totalActiveCars--;
+    if (totalActiveCars == 0) {
+        pthread_cond_broadcast(&allCarsFinishedCond);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
     return NULL;
 }
 
@@ -503,6 +512,9 @@ void* generadorLado1(void* arg) {
     int totalCarros = cantCarsInTimeX(tiempoSimulacion, averageArrivalTimeLeft);
 
     if (totalCarros > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCarros;
+        pthread_mutex_unlock(&activeCarsMutex);
         int tiempos[totalCarros];
         generateAbsoluteTimes(totalCarros, averageArrivalTimeLeft, tiempos);
 
@@ -538,6 +550,9 @@ void* generadorLado2(void* arg) {
     int totalCarros = cantCarsInTimeX(tiempoSimulacion, averageArrivalTimeRight);
 
     if (totalCarros > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCarros;
+        pthread_mutex_unlock(&activeCarsMutex);
         int tiempos[totalCarros];
         generateAbsoluteTimes(totalCarros, averageArrivalTimeRight, tiempos);
 
@@ -721,6 +736,12 @@ void* trafficOfficerLeftSideRoutine(void *arg) {
     pthread_mutex_unlock(&officerMutex);
 
     free(car);
+    pthread_mutex_lock(&activeCarsMutex);
+    totalActiveCars--;
+    if (totalActiveCars == 0) {
+        pthread_cond_broadcast(&allCarsFinishedCond);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
     return NULL;
 }
 
@@ -796,6 +817,12 @@ void* trafficOfficerRightSideRoutine(void *arg) {
     pthread_mutex_unlock(&officerMutex);
 
     free(car);
+    pthread_mutex_lock(&activeCarsMutex);
+    totalActiveCars--;
+    if (totalActiveCars == 0) {
+        pthread_cond_broadcast(&allCarsFinishedCond);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
     return NULL;
 }
 
@@ -804,6 +831,9 @@ void* generatorLeftSideOfficer(void* arg) {
     int totalCars = cantCarsInTimeX(simTime, averageArrivalTimeLeft);
 
     if (totalCars > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCars;
+        pthread_mutex_unlock(&activeCarsMutex);
         int absoluteTimes[totalCars];
         generateAbsoluteTimes(totalCars, averageArrivalTimeLeft, absoluteTimes);
         int currentTime = 0;
@@ -832,6 +862,9 @@ void* generatorRightSideOfficer(void* arg) {
     int totalCars = cantCarsInTimeX(simTime, averageArrivalTimeRight);
 
     if (totalCars > 0) {
+        pthread_mutex_lock(&activeCarsMutex);
+        totalActiveCars += totalCars;
+        pthread_mutex_unlock(&activeCarsMutex);
         int absoluteTimes[totalCars];
         generateAbsoluteTimes(totalCars, averageArrivalTimeRight, absoluteTimes);
         int currentTime = 0;
@@ -931,7 +964,11 @@ void trafficOfficerMode(int simTime) {
     pthread_join(gen1, NULL);
     pthread_join(gen2, NULL);
 
-    sleep(10);
+    pthread_mutex_lock(&activeCarsMutex);
+    while (totalActiveCars > 0) {
+        pthread_cond_wait(&allCarsFinishedCond, &activeCarsMutex);
+    }
+    pthread_mutex_unlock(&activeCarsMutex);
 
     activeSimulation = 0;
     pthread_cond_signal(&officerWakeupCond);
@@ -975,7 +1012,12 @@ int main() {
             pthread_join(gen1, NULL);
             pthread_join(gen2, NULL);
 
-            sleep(10);
+            pthread_mutex_lock(&activeCarsMutex);
+            while (totalActiveCars > 0) {
+                // El main se duerme hasta que escuche que los carros llegaron a 0
+                pthread_cond_wait(&allCarsFinishedCond, &activeCarsMutex);
+            }
+            pthread_mutex_unlock(&activeCarsMutex);
             printf("Simulation Finished.\n");
 
             activeSimulation = 0;
