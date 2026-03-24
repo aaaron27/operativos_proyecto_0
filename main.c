@@ -91,14 +91,12 @@ int carsPassedThisTurn = 0;
 int waitingLeftNormal = 0;
 int waitingRightNormal = 0;
 
-// Traffic light state (declared here so graphicThreadTrafficLight can see it)
 int trafficLigthControllerFlag = 1;
 int trafficLight = 0;
 
 // ========================================================================================
 //     INIT / DESTROY
 // ========================================================================================
-
 void mutexsInit() {
     mutexs = malloc(bridgeWeight * sizeof(pthread_mutex_t));
     conds  = malloc(bridgeWeight * sizeof(pthread_cond_t));
@@ -158,7 +156,6 @@ void readConfigFile() {
 // ========================================================================================
 //     UTILITY
 // ========================================================================================
-
 int arrivalTime(int mean) {
     double u = (double)rand() / RAND_MAX;
     double res = -log(1.0 - u) * mean;
@@ -211,7 +208,6 @@ void generateAbsoluteTimes(int cantidadCarros, int mediaLlegada, int tiemposAbso
 //     TRAFFIC LIGHT MODE
 // ========================================================================================
 
-// --- Graphic thread (NEW) ---
 void* graphicThreadTrafficLight(void* arg) {
     while (activeSimulation) {
         printf("\033[H\033[J");
@@ -220,7 +216,6 @@ void* graphicThreadTrafficLight(void* arg) {
         printf("          BRIDGE SIMULATOR - TRAFFIC LIGHT MODE             \n");
         printf("=============================================================\n\n");
 
-        // Semaphore state with color
         if (trafficLight == 0) {
             printf("  SEMAPHORE: \033[1;32m[ LEFT SIDE  GREEN ]\033[0m  "
                    "\033[0;31m[ RIGHT SIDE  RED  ]\033[0m\n\n");
@@ -235,7 +230,6 @@ void* graphicThreadTrafficLight(void* arg) {
                bridgeDirection == 1 ? "RIGHT<-LEFT" : "none",
                carInBridge);
 
-        // Bridge visual
         printf("         \033[0;37m");
         for (int i = 0; i < bridgeWeight * 3; i++) printf("=");
         printf("\033[0m\n");
@@ -264,12 +258,11 @@ void* graphicThreadTrafficLight(void* arg) {
         for (int i = 0; i < bridgeWeight * 3; i++) printf("~");
         printf("\033[0m\n\n");
 
-        usleep(166666); // ~6 FPS
+        usleep(166666);
     }
     return NULL;
 }
 
-// --- Semaphore controller ---
 void* trafficLightRoutine(void* arg) {
     while (trafficLigthControllerFlag) {
         pthread_mutex_lock(&trafficLightMutex);
@@ -287,7 +280,6 @@ void* trafficLightRoutine(void* arg) {
     return NULL;
 }
 
-// --- Left side car thread (with visualBridge updates) ---
 void* trafficLightLeftSideRoutine(void* arg) {
     Car car = *(Car*)arg;
     free(arg);
@@ -316,7 +308,6 @@ void* trafficLightLeftSideRoutine(void* arg) {
     bridgeDirection = 0;
     pthread_mutex_unlock(&trafficLightMutex);
 
-    // Traverse bridge left -> right with graphics
     int currentPos = 0;
     pthread_mutex_lock(&mutexs[currentPos]);
 
@@ -358,7 +349,6 @@ void* trafficLightLeftSideRoutine(void* arg) {
     return NULL;
 }
 
-// --- Right side car thread (with visualBridge updates) ---
 void* trafficLightRightSideRoutine(void* arg) {
     Car car = *(Car*)arg;
     free(arg);
@@ -387,7 +377,6 @@ void* trafficLightRightSideRoutine(void* arg) {
     bridgeDirection = 1;
     pthread_mutex_unlock(&trafficLightMutex);
 
-    // Traverse bridge right -> left with graphics
     int currentPos = bridgeWeight - 1;
     pthread_mutex_lock(&mutexs[currentPos]);
 
@@ -429,11 +418,9 @@ void* trafficLightRightSideRoutine(void* arg) {
     return NULL;
 }
 
-// --- Mode entry point ---
 void trafficLightMode(int seconds) {
     activeSimulation = 1;
 
-    // Start graphic thread before everything else
     pthread_t graphicThread;
     pthread_create(&graphicThread, NULL, graphicThreadTrafficLight, NULL);
 
@@ -494,11 +481,10 @@ void trafficLightMode(int seconds) {
     pthread_join(trafficLightController, NULL);
     pthread_join(graphicThread, NULL);
 }
+
 // ============================================================================================================================
 //     MODO CARNAGE // FIFOOOOO
 // ============================================================================================================================
-
-
 
 void enterBridge(Car* miCarro) {
     pthread_mutex_lock(&bridgeMutex);
@@ -722,10 +708,10 @@ void* hiloDibujanteCarnage(void* arg) {
     printf("\033[?25h");
     return NULL;
 }
+
 // ============================================================================================================================
 //     MODE TRAFFIC OFFICER
 // ============================================================================================================================
-
 void* trafficOfficerController(void* arg) {
     while(activeSimulation) {
         pthread_mutex_lock(&officerMutex);
