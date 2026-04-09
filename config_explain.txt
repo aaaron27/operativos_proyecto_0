@@ -1,23 +1,22 @@
-longitud puente
+bridge length
 
-1. media exponencial de seg entre llegada de nuevos carros
-2. media exponencial de seg entre llegada de nuevos carros
+1. Exponential average in seconds between the arrival of new cars in left side
+2. Exponential average in seconds between the arrival of new cars in right side
 
-1. velocidad promedio
-2. velocidad promedio
+1. Average speed (left)
+2. Average speed (right)
 
-1.Limite velocidad Min
-2.Limite velocidad Min
+1. Minimum speed limit (left)
+2. Minimum speed limit (rigth)
 
-1.Limite velocidad Max
-2.Limite velocidad Max
+1. Max speed limit (left)
+2. Max speed limit (rigth)
 
-valor k1 - carros que deja pasar
-valor k2 - carros que deja pasar
+k1 value - cars allowed through
+k2 value - cars allowed through
 
-1. duracion luz verde
-2. duracion luz verde 
+1. Green light duration (left)
+2. Green light duration (right)
 
-
-
-porcentaje ambulancias
+1. Percentage of ambulances (left)
+2. Percentage of ambulances (rigth)

@@ -1,10 +1,18 @@
 # Project 0
 
+## [Makefile](Makefile)
+
+Default execute
 ```bash
-gcc main.c -o main -lm
+make
 ```
 
-`lm` math library
+### Commands
+
++ compile
++ run
++ test_cases
++ clean
 
 ## config explain
 

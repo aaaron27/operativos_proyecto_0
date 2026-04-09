@@ -30,7 +30,8 @@ int k2;
 int greenDurationLeft;
 int greenDurationRight;
 
-int ambulancesPercentage;
+int ambulancesPercentageLeft;
+int ambulancesPercentageRight;
 
 int carsInBridgeLeft = 0;
 int carsInBridgeRight = 0;
@@ -148,7 +149,8 @@ void readConfigFile() {
     fscanf(f, "%d", &k2);
     fscanf(f, "%d", &greenDurationLeft);
     fscanf(f, "%d", &greenDurationRight);
-    fscanf(f, "%d", &ambulancesPercentage);
+    fscanf(f, "%d", &ambulancesPercentageLeft);
+    fscanf(f, "%d", &ambulancesPercentageRight);
 
     fclose(f);
 }
@@ -445,7 +447,7 @@ void trafficLightMode(int seconds) {
             car->id          = derIndex;
             car->speed       = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
             car->arrivalTime = t;
-            car->isAmbulance = isAmbulance(ambulancesPercentage);
+            car->isAmbulance = isAmbulance(ambulancesPercentageRight);
 
             pthread_create(&carroDer_t[derIndex], NULL, trafficLightRightSideRoutine, car);
             derIndex++;
@@ -458,7 +460,7 @@ void trafficLightMode(int seconds) {
             car->id          = izqIndex;
             car->speed       = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
             car->arrivalTime = t;
-            car->isAmbulance = isAmbulance(ambulancesPercentage);
+            car->isAmbulance = isAmbulance(ambulancesPercentageLeft);
 
             pthread_create(&carroIzq_t[izqIndex], NULL, trafficLightLeftSideRoutine, car);
             izqIndex++;
@@ -615,7 +617,7 @@ void* generadorLado1(void* arg) {
             nuevoCarro->id = contadorId++;
             nuevoCarro->arrivalTime = tiempos[i];
             nuevoCarro->speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
-            nuevoCarro->isAmbulance = isAmbulance(ambulancesPercentage);
+            nuevoCarro->isAmbulance = isAmbulance(ambulancesPercentageLeft);
             nuevoCarro->type = 1;
 
             pthread_t hiloCarro;
@@ -652,7 +654,7 @@ void* generadorLado2(void* arg) {
             nuevoCarro->id = contadorId++;
             nuevoCarro->arrivalTime = tiempos[i];
             nuevoCarro->speed = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
-            nuevoCarro->isAmbulance = isAmbulance(ambulancesPercentage);
+            nuevoCarro->isAmbulance = isAmbulance(ambulancesPercentageRight);
             nuevoCarro->type = 2;
 
             pthread_t hiloCarro;
@@ -934,7 +936,7 @@ void* generatorLeftSideOfficer(void* arg) {
             newCar->id = i + 1;
             newCar->arrivalTime = absoluteTimes[i];
             newCar->speed = generateSpeed(averageSpeedLeft, minSpeedLeft, maxSpeedLeft);
-            newCar->isAmbulance = isAmbulance(ambulancesPercentage);
+            newCar->isAmbulance = isAmbulance(ambulancesPercentageLeft);
             newCar->type = 1;
 
             pthread_t carThread;
@@ -965,7 +967,7 @@ void* generatorRightSideOfficer(void* arg) {
             newCar->id = i + 1;
             newCar->arrivalTime = absoluteTimes[i];
             newCar->speed = generateSpeed(averageSpeedRight, minSpeedRight, maxSpeedRight);
-            newCar->isAmbulance = isAmbulance(ambulancesPercentage);
+            newCar->isAmbulance = isAmbulance(ambulancesPercentageRight);
             newCar->type = 2;
 
             pthread_t carThread;
@@ -1074,7 +1076,7 @@ int main() {
     mutexsInit();
 
     visualBridge = (int*)calloc(bridgeWeight, sizeof(int));
-    printf("Cuanto va a durar la simulacion? ");
+    printf("How long (in sec) the simulation will be?");
     int tiempoSim;
     scanf("%d", &tiempoSim);
     printf("      ONE WAY BRIDGE SIMULATION - START       \n");
