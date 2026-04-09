@@ -1,7 +1,34 @@
-# Proyecto 0
+# Project 0
 
 ```bash
 gcc main.c -o main -lm
 ```
 
-`lm` para enlazar la libreria de mate
+`lm` math library
+
+## config explain
+
+```
+bridge length
+
+1. Exponential average in seconds between the arrival of new cars in left side
+2. Exponential average in seconds between the arrival of new cars in right side
+
+1. Average speed (left)
+2. Average speed (right)
+
+1. Minimum speed limit (left)
+2. Minimum speed limit (rigth)
+
+1. Max speed limit (left)
+2. Max speed limit (rigth)
+
+k1 value - cars allowed through
+k2 value - cars allowed through
+
+1. Green light duration (left)
+2. Green light duration (right)
+
+1. Percentage of ambulances (left)
+2. Percentage of ambulances (rigth)
+```
