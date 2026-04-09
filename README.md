@@ -39,4 +39,9 @@ k2 value - cars allowed through
 
 1. Percentage of ambulances (left)
 2. Percentage of ambulances (rigth)
+
 ```
+
+<div align="center">
+  <img src="dictator.png"/>
+</div>
